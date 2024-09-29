@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>The Red Line</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+
+<body>
+    <div class="wrapper">
+        <div id="input-container">
+            <input type="text" id="input-query" placeholder="enter query...">
+            <button id="submit-query">submit</button>
+        </div>
+        <label id="meter-label">Average Score: <span id="the-score">0</span></label>
+        <meter id="meter" min="0" max="1" value="0" low="0.25" high="0.75"></meter>
+        <div id="nyt-indicator"></div>
+    </div>
+
+    <script src="script.js" type="module"></script>
+    <script src="data.json" type="application/json"></script>
+
+</body>
+
+</html>

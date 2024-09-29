@@ -1,0 +1,22 @@
+{
+    "items": [
+        {
+            "line": "Breaking news: something happened",
+            "score": 0.5,
+            "timestamp": "2024-01-01T00:00:00Z",
+            "source": "https://example.com"
+        },
+        {
+            "line": "Newly discovered evidence suggests terrible things",
+            "score": 0.2,
+            "timestamp": "2024-01-02T00:00:00Z",
+            "source": "https://example.com"
+        },
+        {
+            "line": "Scientist now say that the world is round",
+            "score": 0.5,
+            "timestamp": "2024-01-03T00:00:00Z",
+            "source": "https://example.com"
+        }
+    ]
+}
