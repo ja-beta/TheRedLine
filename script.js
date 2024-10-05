@@ -66,7 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         try {
-            const response = await fetchWithTimeout(apiUrl, options, 300000); // 5 minutes timeout
+            const response = await fetchWithTimeout(apiUrl, options, 600000); // 10 minutes timeout
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
