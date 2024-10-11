@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
 import { getDatabase, ref, onValue, update, set, onChildAdded, onChildChanged } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
-import { firebaseConfig, apiUrl, nytApiKey } from './config.js';
+import { firebaseConfig, apiUrl, ncApiKey } from './config.js';
 
 let db;
 
@@ -33,7 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function subscribeToData() {
-        const folder = "items";
+        const folder = "newscatcher";
         const thisRef = ref(db, folder);
 
         onChildAdded(thisRef, (snapshot) => {
@@ -66,7 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         try {
-            const response = await fetchWithTimeout(apiUrl, options, 600000); // 10 minutes timeout
+            const response = await fetchWithTimeout(apiUrl, options, 300000); // 5 minutes timeout
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -168,38 +168,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // NYTimes API ______________________________________________________________________________________
 
-    function callNytApi() {
-        fetchNytArticles();
-        setInterval(() => {
-            fetchNytArticles();
-        }, 300000); // 5 minutes
-    }
+    //Newscatcher API
 
-    async function fetchNytArticles() {
-        const nytApiUrl = `https://api.nytimes.com/svc/news/v3/content/nyt/world.json?api-key=${nytApiKey}`;
-        try {
-            const response = await fetch(nytApiUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const data = await response.json();
-            const articles = data.results;
 
-            articles.forEach(article => {
-                if (article.abstract) {
-                    addQuery(article.abstract);
-                }
-
-                const nytIndicator = document.getElementById("nyt-indicator");
-                nytIndicator.style.backgroundColor = "red";
-                setTimeout(() => {
-                    nytIndicator.style.backgroundColor = "lightgray";
-                }, 5000);
-            });
-        } catch (error) {
-            console.error("Error fetching data:", error);
-        }
-    }
+    
 });
