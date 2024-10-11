@@ -170,7 +170,35 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     //Newscatcher API
+    function callNewsCatcher(){
+        fetchArticles();
+        setInterval(fetchArticles, 60000);
+    }
 
+    async function fetchArticles() {
+        const url = "https://api.newscatcherapi.com/v2/latest_headlines?countries=US";
+        const options = {
+            method: "GET",
+            headers: {
+                "x-api-key": ncApiKey,
+            },
+        };
+
+        try {
+            const response = await fetch(url, options);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const result = await response.json();
+            console.log("Newscatcher API response:", result);
+            const articles = result.articles || [];
+            articles.forEach((article) => {
+                addQuery(article.title);
+            });
+        } catch (error) {
+            console.error("Error fetching data:", error);
+        }
+    }
 
     
 });
