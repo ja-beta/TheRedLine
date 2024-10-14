@@ -14,7 +14,7 @@ exports.fetchNews = functions.https.onRequest(async (req, res) => {
       return;
     }
   
-    const url = 'https://api.newscatcherapi.com/v2/latest_headlines?lang=en&countries=US&topic=world';
+    const url = 'https://api.newscatcherapi.com/v2/latest_headlines?lang=en&when=1h';
   
     const options = {
       method: 'GET',

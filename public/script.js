@@ -4,7 +4,6 @@ import { firebaseConfig, apiUrl } from './config.js';
 
 let db;
 
-// Initialize Firebase and Realtime Database
 document.addEventListener("DOMContentLoaded", () => {
     initFirebaseDB();
     subscribeToNewArticles();
@@ -86,7 +85,6 @@ function updateArticleListUI(articles) {
 
 
 
-// Initialize Firebase Realtime Database
 function initFirebaseDB() {
     const app = initializeApp(firebaseConfig);
     db = getDatabase();
@@ -99,16 +97,13 @@ function subscribeToNewArticles() {
         const article = snapshot.val();
 
         if (article && article.score === "pending") {
-            const prompt = `Please provide a sentiment analysis score for the following text: "${article.summary}". 
-The score should be a floating point number between 0 and 1 (0 is negative and 1 is positive) and up to 6 decimal places. 
-The answer should only contain the number, no additional characters, spaces, or line breaks.`;
+            const prompt = `Please provide a sentiment analysis score for the following text: "${article.summary}". When calculating the score, consider the greater good of most people living in the geographic region known as Israel / Palestine. The score must be a floating point number between 0 and 1 (0 is negative and 1 is positive) with up to 6 decimal places. The answer should only contain the number, no additional characters, spaces, or line breaks.`;
 
             askValue(prompt, snapshot.key);
         }
     });
 }
 
-// Perform sentiment analysis and update the score in the database
 async function askValue(prompt, key) {
     console.log("Sending sentiment analysis request for article:", key);
 
@@ -135,22 +130,18 @@ async function askValue(prompt, key) {
         }
 
         const result = await response.json();
-        console.log("API Response:", result);  // Log the full response
-
+        console.log("API Response:", result);  
         let score;
-        // Check if result.output is an array, and process accordingly
         if (Array.isArray(result.output)) {
-            // Join array elements and remove non-numeric characters
             const rawScore = result.output.join('').replace(/[^0-9.]/g, '');
             score = parseFloat(rawScore);
         } else {
-            // Handle case where output is a string or number directly
             score = parseFloat(result.output);
         }
 
         if (!isNaN(score)) {
             console.log(`Valid score received for article ${key}:`, score);
-            updateScoreInFirebase(key, score);  // Update the score in Firebase
+            updateScoreInFirebase(key, score); 
         } else {
             console.error(`Invalid score received for article ${key}:`, result.output);
         }
@@ -162,7 +153,7 @@ async function askValue(prompt, key) {
 
 function updateScoreInFirebase(key, score) {
     const newsRef = ref(db, `news/${key}`);
-    update(newsRef, { score: score })  // Replace "pending" with the score
+    update(newsRef, { score: score }) 
         .then(() => {
             console.log(`Score successfully updated in Firebase for article ${key}`);
         })
@@ -173,37 +164,78 @@ function updateScoreInFirebase(key, score) {
 
 
 
-// Subscribe to article score updates and update the main score
 function subscribeToScoreUpdates() {
     const newsRef = ref(db, 'news');
 
     onChildChanged(newsRef, (snapshot) => {
         const updatedArticle = snapshot.val();
         if (updatedArticle && typeof updatedArticle.score === "number") {
-            calculateAndUpdateMainScore();  // Recalculate main score when an article score is updated
+            // calculateAndUpdateMainScore(); 
+            calculateAndDisplayWeightedAverage();
         }
     });
 }
 
-// Calculate the main score by averaging all article scores
-function calculateAndUpdateMainScore() {
+// function calculateAndUpdateMainScore() {
+//     const newsRef = ref(db, 'news');
+
+//     onValue(newsRef, (snapshot) => {
+//         const articles = snapshot.val();
+//         const keys = Object.keys(articles || {});
+//         const totalScores = keys.reduce((sum, key) => sum + (articles[key].score || 0), 0);
+//         const averageScore = totalScores / keys.length;
+
+//         console.log("Calculated average score:", averageScore);
+//         updateMainScore(averageScore);
+//     });
+// }
+
+// function updateMainScore(averageScore) {
+//     const mainScoreRef = ref(db, 'mainScore');
+//     set(mainScoreRef, { score: averageScore })
+//         .then(() => {
+//             console.log("Main score updated successfully");
+//         })
+//         .catch((error) => {
+//             console.error("Error updating main score:", error);
+//         });
+// }
+
+function calculateAndDisplayWeightedAverage() {
     const newsRef = ref(db, 'news');
 
     onValue(newsRef, (snapshot) => {
         const articles = snapshot.val();
         const keys = Object.keys(articles || {});
-        const totalScores = keys.reduce((sum, key) => sum + (articles[key].score || 0), 0);
-        const averageScore = totalScores / keys.length;
+        const currentTime = Date.now();
+        let totalWeightedScore = 0;
+        let totalWeight = 0;
 
-        console.log("Calculated average score:", averageScore);
-        updateMainScore(averageScore);
+        // Define a decay constant for weighting, e.g., 7 days in milliseconds
+        const decayConstant = 7 * 24 * 60 * 60 * 1000;  // 1 week
+
+        keys.forEach((key) => {
+            const article = articles[key];
+            const articleTime = article.timestamp; 
+            const timeDifference = currentTime - articleTime;
+
+            const weight = Math.exp(-timeDifference / decayConstant);
+
+            if (!isNaN(article.score)) {
+                totalWeightedScore += article.score * weight;  
+                totalWeight += weight; 
+            }
+        });
+
+        const weightedAverage = totalWeight === 0 ? 0 : totalWeightedScore / totalWeight;
+        console.log(`Calculated weighted average score: ${weightedAverage}`);
+        updateMainScore(weightedAverage);
     });
 }
 
-// Update the main score in the database
-function updateMainScore(averageScore) {
+function updateMainScore(weightedAverage) {
     const mainScoreRef = ref(db, 'mainScore');
-    set(mainScoreRef, { score: averageScore })
+    set(mainScoreRef, { score: weightedAverage })
         .then(() => {
             console.log("Main score updated successfully");
         })
@@ -211,3 +243,8 @@ function updateMainScore(averageScore) {
             console.error("Error updating main score:", error);
         });
 }
+
+
+
+
+
