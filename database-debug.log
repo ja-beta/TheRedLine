@@ -1,0 +1,13 @@
+WARNING: An illegal reflective access operation has occurred
+WARNING: Illegal reflective access by io.netty.util.internal.ReflectionUtil (file:/Users/jasminenackash/.cache/firebase/emulators/firebase-database-emulator-v4.11.2.jar) to field sun.nio.ch.SelectorImpl.selectedKeys
+WARNING: Please consider reporting this to the maintainers of io.netty.util.internal.ReflectionUtil
+WARNING: Use --illegal-access=warn to enable warnings of further illegal reflective access operations
+WARNING: All illegal access operations will be denied in a future release
+12:58:01.108 [NamespaceSystem-akka.actor.default-dispatcher-5] INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
+12:58:01.323 [main] INFO com.firebase.server.forge.App$ - Listening at 127.0.0.1:9000
+12:58:08.679 [NamespaceSystem-akka.actor.default-dispatcher-5] INFO com.firebase.core.namespace.NamespaceActor - theredline-jn-default-rtdb successfully activated FBKV (SurveyIdle(0)) wait: 158ms, init: 0ms
+12:58:08.806 [NamespaceSystem-blocking-namespace-operation-dispatcher-7] INFO com.firebase.core.namespace.StateManager - Namespace theredline-jn-default-rtdb status Active to Active
+13:04:11.377 [Thread-0] INFO com.firebase.server.forge.App$ - Attempting graceful shutdown.
+13:04:11.390 [NamespaceSystem-akka.actor.default-dispatcher-11] INFO com.firebase.core.namespace.Terminator$Terminator - 1 actors left to terminate: theredline-jn-default-rtdb
+13:04:11.396 [NamespaceSystem-akka.actor.default-dispatcher-16] INFO com.firebase.core.namespace.NamespaceActor - stopped namespace actor for theredline-jn-default-rtdb
+13:04:11.400 [Thread-0] INFO com.firebase.server.forge.App$ - Graceful shutdown complete.

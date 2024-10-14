@@ -1,14 +1,14 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
 import { getDatabase, ref, onValue, update, set, onChildAdded, onChildChanged } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
-import { firebaseConfig } from './config.js';
+import { firebaseConfig, apiUrl } from './config.js';
 
 let db;
 
 // Initialize Firebase and Realtime Database
 document.addEventListener("DOMContentLoaded", () => {
     initFirebaseDB();
-    subscribeToNewArticles();  
-    subscribeToScoreUpdates();  
+    subscribeToNewArticles();
+    subscribeToScoreUpdates();
     displayMainScore();
     displayArticles();
 });
@@ -36,13 +36,13 @@ function displayArticles() {
 
     onValue(newsRef, (snapshot) => {
         const articles = snapshot.val();
-        console.log("Fetched articles from Firebase:", articles); 
+        console.log("Fetched articles from Firebase:", articles);
 
         if (articles && Object.keys(articles).length > 0) {
             updateArticleListUI(articles);
         } else {
-            console.log("No articles available in Firebase."); 
-            updateArticleListUI(null);  
+            console.log("No articles available in Firebase.");
+            updateArticleListUI(null);
         }
     });
 }
@@ -51,10 +51,10 @@ function displayArticles() {
 
 function updateArticleListUI(articles) {
     const articleList = document.getElementById('article-list');
-    articleList.innerHTML = '';  
+    articleList.innerHTML = '';
 
     if (!articles) {
-        console.log("No articles found.");  
+        console.log("No articles found.");
         return;
     }
 
@@ -66,7 +66,13 @@ function updateArticleListUI(articles) {
         title.textContent = article.title;
 
         const score = document.createElement('span');
-        score.textContent = ` - Score: ${article.score !== null ? article.score.toFixed(6) : 'Calculating...'}`;
+        if (article.score === "pending") {
+            score.textContent = ' - Score: Calculating...';
+        } else if (!isNaN(article.score)) {
+            score.textContent = ` - Score: ${article.score.toFixed(6)}`;
+        } else {
+            score.textContent = ' - Score: Error';
+        }
 
         listItem.appendChild(title);
         listItem.appendChild(score);
@@ -75,21 +81,24 @@ function updateArticleListUI(articles) {
 }
 
 
+
 // Initialize Firebase Realtime Database
 function initFirebaseDB() {
     const app = initializeApp(firebaseConfig);
     db = getDatabase();
 }
 
-// Subscribe to new articles being added to the database
 function subscribeToNewArticles() {
     const newsRef = ref(db, 'news');
 
-    // Listen for new articles being added
     onChildAdded(newsRef, (snapshot) => {
         const article = snapshot.val();
-        if (article && !article.score) {
-            const prompt = `Please perform sentiment analysis on the following text: ${article.title}. Provide a score between 0 and 1, 0 being negative and 1 being positive. Your answer should a floating point number of up to 6 decimal places, and should contain no other characters or spaces.`;
+
+        if (article && article.score === "pending") {
+            const prompt = `Please provide a sentiment analysis score for the following text: "${article.title}". 
+The score should be a floating point number between 0 and 1 (0 is negative and 1 is positive) and up to 6 decimal places. 
+The answer should only contain the number, no additional characters, spaces, or line breaks.`;
+
             askValue(prompt, snapshot.key);
         }
     });
@@ -97,6 +106,8 @@ function subscribeToNewArticles() {
 
 // Perform sentiment analysis and update the score in the database
 async function askValue(prompt, key) {
+    console.log("Sending sentiment analysis request for article:", key);
+
     const data = {
         modelURL: "https://api.replicate.com/v1/models/meta/meta-llama-3-70b-instruct/predictions",
         input: {
@@ -114,31 +125,49 @@ async function askValue(prompt, key) {
     };
 
     try {
-        const response = await fetch(apiUrl, options);  // Assuming apiUrl is defined elsewhere
+        const response = await fetch(apiUrl, options);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const result = await response.json();
-        const score = result.output[0]; 
 
-        // Update the score in Firebase Realtime Database
-        updateScoreInFirebase(key, parseFloat(score));
+        const result = await response.json();
+        console.log("API Response:", result);  // Log the full response
+
+        let score;
+        // Check if result.output is an array, and process accordingly
+        if (Array.isArray(result.output)) {
+            // Join array elements and remove non-numeric characters
+            const rawScore = result.output.join('').replace(/[^0-9.]/g, '');
+            score = parseFloat(rawScore);
+        } else {
+            // Handle case where output is a string or number directly
+            score = parseFloat(result.output);
+        }
+
+        if (!isNaN(score)) {
+            console.log(`Valid score received for article ${key}:`, score);
+            updateScoreInFirebase(key, score);  // Update the score in Firebase
+        } else {
+            console.error(`Invalid score received for article ${key}:`, result.output);
+        }
     } catch (error) {
         console.error("Error fetching sentiment score:", error);
     }
 }
 
-// Update the score in Firebase for the given article
+
 function updateScoreInFirebase(key, score) {
     const newsRef = ref(db, `news/${key}`);
-    update(newsRef, { score: score })
+    update(newsRef, { score: score })  // Replace "pending" with the score
         .then(() => {
-            console.log("Score updated successfully");
+            console.log(`Score successfully updated in Firebase for article ${key}`);
         })
         .catch((error) => {
-            console.error("Error updating score:", error);
+            console.error("Error updating score in Firebase:", error);
         });
 }
+
+
 
 // Subscribe to article score updates and update the main score
 function subscribeToScoreUpdates() {
