@@ -65,6 +65,9 @@ function updateArticleListUI(articles) {
         const title = document.createElement('strong');
         title.textContent = article.title;
 
+        const summary = document.createElement('p');
+        summary.textContent = article.summary;
+
         const score = document.createElement('span');
         if (article.score === "pending") {
             score.textContent = ' - Score: Calculating...';
@@ -75,6 +78,7 @@ function updateArticleListUI(articles) {
         }
 
         listItem.appendChild(title);
+        listItem.appendChild(summary);
         listItem.appendChild(score);
         articleList.appendChild(listItem);
     });
@@ -95,7 +99,7 @@ function subscribeToNewArticles() {
         const article = snapshot.val();
 
         if (article && article.score === "pending") {
-            const prompt = `Please provide a sentiment analysis score for the following text: "${article.title}". 
+            const prompt = `Please provide a sentiment analysis score for the following text: "${article.summary}". 
 The score should be a floating point number between 0 and 1 (0 is negative and 1 is positive) and up to 6 decimal places. 
 The answer should only contain the number, no additional characters, spaces, or line breaks.`;
 
