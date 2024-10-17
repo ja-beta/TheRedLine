@@ -14,7 +14,7 @@ exports.fetchNews = functions.https.onRequest(async (req, res) => {
       return;
     }
   
-    const url = 'https://api.newscatcherapi.com/v2/latest_headlines?lang=en&when=24h&page_size=100';
+    const url = 'https://api.newscatcherapi.com/v2/latest_headlines?lang=en&when=7d&page_size=100';
   
     const options = {
       method: 'GET',
@@ -62,7 +62,7 @@ exports.fetchNews = functions.https.onRequest(async (req, res) => {
           score: "pending",
         });
 
-        const prompt = `Please provide a sentiment analysis score for the following text: "${article.summary}". When calculating the score, consider the greater good of most people living in the geographic region known as Israel / Palestine. The score must be a floating point number between 0 and 1 (0 is negative and 1 is positive) with up to 6 decimal places. The answer should only contain the number, no additional characters, spaces, or line breaks.`;
+        const prompt = `Please provide a sentiment analysis score for the following text: "${article.summary}". When calculating the score, consider the greater good of people living in the geographic region known as Israel / Palestine and the impact that's described in the text could have over their future. The score must be a floating point number between 0 and 1 (0 is negative sentiment and 1 is positive sentiment) with up to 6 decimal places. The answer should only contain the number, no additional characters, spaces, or line breaks.`;
         await askValue(prompt, articleRef.key);
       });
   
