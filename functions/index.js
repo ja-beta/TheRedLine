@@ -4,7 +4,6 @@ const fetch = require('node-fetch');
 
 admin.initializeApp();
 
-// Fetch news from API
 exports.fetchNews = functions.https.onRequest(async (req, res) => {
     const API_KEY = process.env.NEWSCATCHER_API_KEY;
   
@@ -35,7 +34,7 @@ exports.fetchNews = functions.https.onRequest(async (req, res) => {
       console.log("NewsCatcher API response:", result);
   
       const filteredArticles = result.articles.filter(article =>
-        article.title.includes('Israel') || article.title.includes('Israeli')
+        article.summary.toLowerCase().includes('Israel') || article.summary.toLowerCase().includes('Israeli')
       );
       console.log("Filtered articles:", filteredArticles);
   
