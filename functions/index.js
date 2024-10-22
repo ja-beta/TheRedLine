@@ -13,7 +13,7 @@ exports.fetchNews = functions.https.onRequest(async (req, res) => {
       return;
     }
   
-    const url = 'https://api.newscatcherapi.com/v2/latest_headlines?lang=en&when=7d&page_size=100';
+    const url = 'https://api.newscatcherapi.com/v2/latest_headlines?lang=en&when=24h&page_size=100&topic=news';
   
     const options = {
       method: 'GET',
@@ -33,9 +33,14 @@ exports.fetchNews = functions.https.onRequest(async (req, res) => {
       const result = await response.json();
       console.log("NewsCatcher API response:", result);
   
-      const filteredArticles = result.articles.filter(article =>
-        article.summary.toLowerCase().includes('Israel') || article.summary.toLowerCase().includes('Israeli')
-      );
+      const filteredArticles = result.articles.filter(article => {
+        const summary = article.summary.toLowerCase();
+        const matches = summary.includes('israel') || summary.includes('israeli');
+        if (matches) {
+          console.log(`Article matches criteria: ${article.title}`);
+        }
+        return matches;
+      });
       console.log("Filtered articles:", filteredArticles);
   
       if (filteredArticles.length === 0) {

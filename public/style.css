@@ -1,0 +1,53 @@
+body{
+    background-color: rgb(229, 226, 222);
+    padding: 32px;
+    font-family: 'helvetica';
+}
+
+.score-wrapper{
+    display: flex;
+    gap: 16px;
+    align-items: center;    
+}
+
+#main-score-label{
+    font-size: 24px;
+    font-weight: 200;
+}
+
+
+progress{
+    width: 100%;
+    height: 64px;
+    border: none;
+    background-color: white;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 32px 0 64px 0;
+
+}
+
+progress::-webkit-progress-bar {
+    background-color: white;
+    border: 1px solid black;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+::-webkit-progress-value {
+    background-color: transparent;
+    border-right: red solid 24px;
+}
+
+#article-list {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.title{
+    font-size: 24px;
+    font-weight: 200;
+    /* text-decoration: underline;
+    text-underline-offset: 4px; */
+}
