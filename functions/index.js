@@ -22,10 +22,14 @@ const referenceTexts = {
 let embeddingBest = null;
 let embeddingWorst = null;
 
+
 async function initializeApp() {
   console.log("Initializing reference embeddings...");
   try {
     const { bestAvg, worstAvg, clusterAnalysis } = await generateReferenceEmbeddings();
+
+    embeddingBest = bestAvg;
+    embeddingWorst = worstAvg;
     
     if (!clusterAnalysis.isValid) {
       console.warn("WARNING: Reference embeddings may not be reliable:", clusterAnalysis.issues);
@@ -57,24 +61,6 @@ async function initializeApp() {
 admin.initializeApp();
 initializeApp().catch(console.error);
 
-function amplifyEmbeddingDifferences(bestAvg, worstAvg, amplificationFactor = 2.0) {
-  // Calculate the midpoint between best and worst
-  const midpoint = averageEmbeddings([bestAvg, worstAvg]);
-  
-  // Calculate vectors from midpoint to each average
-  const bestVector = bestAvg.map((val, i) => val - midpoint[i]);
-  const worstVector = worstAvg.map((val, i) => val - midpoint[i]);
-  
-  // Amplify the vectors
-  const amplifiedBest = bestAvg.map((val, i) => midpoint[i] + (bestVector[i] * amplificationFactor));
-  const amplifiedWorst = worstAvg.map((val, i) => midpoint[i] + (worstVector[i] * amplificationFactor));
-  
-  // Normalize the amplified vectors
-  return {
-    bestAvg: normalizeEmbedding(amplifiedBest),
-    worstAvg: normalizeEmbedding(amplifiedWorst)
-  };
-}
 
 
 async function generateReferenceEmbeddings() {
@@ -86,16 +72,13 @@ async function generateReferenceEmbeddings() {
       referenceTexts.worst.map(text => askEmbedding(text))
     );
 
-    // Normalize all embeddings
     const normalizedBest = bestEmbeddings.map(normalizeEmbedding);
     const normalizedWorst = worstEmbeddings.map(normalizeEmbedding);
 
-    // Calculate centers
     let bestAvg = normalizeEmbedding(averageEmbeddings(normalizedBest));
     let worstAvg = normalizeEmbedding(averageEmbeddings(normalizedWorst));
 
-    // Amplify the differences
-    const amplificationFactor = 10.0; // Adjust this value to control separation
+    const amplificationFactor = 10.0; 
     const amplified = amplifyEmbeddingDifferences(bestAvg, worstAvg, amplificationFactor);
     bestAvg = amplified.bestAvg;
     worstAvg = amplified.worstAvg;
@@ -275,7 +258,8 @@ async function askEmbedding(textInput) {
 
   try {
     const data = {
-      version: "75b33f253f7714a281ad3e9b28f63e3232d583716ef6718f2e46641077ea040a",
+      version: "75b33f253f7714a281ad3e9b28f63e3232d583716ef6718f2e46641077ea040a", // CLIP
+      // version: "b6b7585c9640cd7a9572c6e129c9549d79c9c31f0d3fdce7baac7c67ca38f305", // Replicate allmpnet-base-a2
       input: {
         inputs: textInput,
       },
@@ -334,7 +318,7 @@ async function updateEmbeddingInFirebase(key, embedding) {
 
     const newsRef = admin.database().ref(`news/${key}`);
     await newsRef.update({
-      embedding: embedding,  // This is already the array from askEmbedding
+      embedding: embedding, 
       embeddingUpdatedAt: Date.now()
     });
 
@@ -551,13 +535,12 @@ function analyzeEmbeddingClusters(bestEmbeddings, worstEmbeddings, bestAvg, wors
       internalSimilarity: average(worstInternalSims),
       centerDistance: average(worstCenterDists)
     },
-    clusterSeparation: centerSeparation,  // Changed from average cross-similarities
+    clusterSeparation: centerSeparation,  
     isValid: true,
     issues: []
   };
 
-  // Validation criteria
-  if (analysis.clusterSeparation < 0.4) {  // Adjusted threshold
+  if (analysis.clusterSeparation < 0.4) {  
     analysis.isValid = false;
     analysis.issues.push("Best and worst cases are too similar to each other");
   }
@@ -584,7 +567,6 @@ function amplifyEmbeddingDifferences(bestAvg, worstAvg, amplificationFactor = 10
   return { bestAvg: amplifiedBest, worstAvg: amplifiedWorst };
 }
 
-// Helper functions remain the same
 function calculateInternalSimilarities(embeddings) {
   const similarities = [];
   for (let i = 0; i < embeddings.length; i++) {
