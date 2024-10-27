@@ -36,7 +36,7 @@ progress::-webkit-progress-bar {
 
 ::-webkit-progress-value {
     background-color: transparent;
-    border-right: red solid 24px;
+    border-right: black solid 24px;
 }
 
 #article-list {
