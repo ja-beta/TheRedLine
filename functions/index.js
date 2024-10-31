@@ -107,6 +107,7 @@ function averageEmbeddings(embeddings) {
 
 exports.fetchNews = functions.https.onRequest(async (req, res) => {
   const API_KEY = process.env.NEWSCATCHER_API_KEY;
+  const GAS_API_KEY = process.env.GOOGLE_AI_STUDIO_API_KEY;
 
   if (!API_KEY) {
     console.error("NewsCatcher API key is missing.");

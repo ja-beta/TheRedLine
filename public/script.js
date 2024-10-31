@@ -72,3 +72,35 @@ function createArticleElement(article) {
     return articleDiv;
 }
 
+
+window.exportArticlesToCSV = function() {
+    const articlesRef = ref(db, 'news');
+    
+    onValue(articlesRef, (snapshot) => {
+        const articles = snapshot.val();
+        
+        if (!articles) {
+            console.log('No articles found in database');
+            return;
+        }
+
+        let csvContent = 'Summary,Score\n'; // Header row
+
+        Object.values(articles).forEach(article => {
+            const cleanSummary = article.summary
+                .replace(/"/g, '""')
+                .replace(/\n/g, ' ');
+            csvContent += `"${cleanSummary}",\n`;
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute('download', `articles_${timestamp}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+};
