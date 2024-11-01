@@ -481,7 +481,20 @@ async function updateMainScore(weightedAverage) {
   const mainScoreRef = admin.database().ref('mainScore');
   await mainScoreRef.set({ score: weightedAverage });
   console.log("Main score updated successfully.");
+
+  if (client.connected) {
+    const scoreMessage = JSON.stringify({ score: weightedAverage });
+    client.publish(MQTT_TOPIC, scoreMessage, { qos: 1 }, (err) => {
+      if (err) {
+        console.error('Failed to publish message:', err);
+      } else {
+        console.log(`Published score to MQTT topic "${MQTT_TOPIC}":`, scoreMessage);
+      }
+    });
+  }
 }
+
+
 function normalizeEmbedding(embedding) {
   const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
   return embedding.map(val => val / magnitude);
@@ -591,3 +604,31 @@ function calculateCrossSimilarities(embeddingsA, embeddingsB) {
 function average(arr) {
   return arr.reduce((sum, val) => sum + val, 0) / arr.length;
 }
+
+
+
+//#region  MQTT ___________________________________________________________________
+
+const mqtt = require('mqtt');
+const MQTT_BROKER_URL = "theredline.cloud.shiftr.io";
+const MQTT_USERNAME = "theredline";
+const MQTT_PASSWORD = "thisisit";
+const MQTT_TOPIC = "mainScore";
+
+const client = mqtt.connect(MQTT_BROKER_URL, {
+  username: MQTT_USERNAME,
+  password: MQTT_PASSWORD
+});
+
+client.on('connect', () => {
+  console.log('Connected to MQTT broker');
+  client.subscribe(MQTT_TOPIC, { qos: 1 }, (err) => {
+    if (err) console.error('Failed to subscribe to topic:', err);
+  });
+});
+
+client.on('error', (err) => {
+  console.error('MQTT error:', err);
+});
+
+//#endregion
