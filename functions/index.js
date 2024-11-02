@@ -6,45 +6,67 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 admin.initializeApp();
 
-exports.testGemini = functions.https.onRequest(async (req, res) => {
+exports.compareModels = functions.https.onRequest(async (req, res) => {
   try {
-    console.log("Starting Gemini model test...");
+    console.log("Starting model comparison test...");
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
-    const model = genAI.getGenerativeModel({
+    
+    const tunedModel = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
       tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
     });
 
-    const testPrompt = `Please provide a sentiment analysis score for the following article summary. When calculating the score, consider the greater good of people living in the geographic region known as Israel / Palestine and the impact that's described in the text could have over their future. The score must be a floating point number between 0 and 1 (0 is negative sentiment and 1 is positive sentiment) with up to 6 decimal places.
+    const baseModel = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash"
+    });
 
-Summary: Peace talks between Israeli and Palestinian leaders show promising progress with both sides agreeing to humanitarian measures.`;
+    const testCases = [
+      "Peace talks between Israeli and Palestinian leaders show promising progress with both sides agreeing to humanitarian measures.",
+      "Violent clashes erupted at the border, resulting in casualties on both sides.",
+      "New economic cooperation agreement signed between Israeli and Palestinian businesses.",
+      "Protests against the ongoing conflict continue to grow in major cities.",
+      "Joint Israeli-Palestinian youth education program launches in Jerusalem."
+    ];
 
-    const result = await model.generateContent(testPrompt);
-    const response = await result.response;
-    const score = response.text().trim();
+    const results = [];
 
-    console.log("Test response from Gemini:", score);
+    for (const testCase of testCases) {
+      const prompt = `Please provide a sentiment analysis score for the article summary added below. When calculating the score, consider the greater good of people living in the geographic region known as Israel / Palestine and the impact that's described in the text could have over their future. The score must be a floating point number between 0 and 1 (0 is negative sentiment and 1 is positive sentiment) with up to 6 decimal places. The answer should only contain the number, no additional characters, spaces, or line breaks.
 
-    const numScore = parseFloat(score);
-    const isValidScore = !isNaN(numScore) && numScore >= 0 && numScore <= 1;
+Summary: ${testCase}`;
+
+      const tunedResult = await tunedModel.generateContent(prompt);
+      const baseResult = await baseModel.generateContent(prompt);
+
+      const tunedResponse = tunedResult.response.text().trim();
+      const baseResponse = baseResult.response.text().trim();
+
+      results.push({
+        summary: testCase,
+        tunedModel: {
+          response: tunedResponse,
+          parsedScore: parseFloat(tunedResponse)
+        },
+        baseModel: {
+          response: baseResponse,
+          parsedScore: parseFloat(baseResponse)
+        }
+      });
+    }
 
     res.status(200).json({
       success: true,
       modelInfo: {
-        baseModel: "gemini-1.5-flash",
-        tunedModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
+        tunedModel: "tunedModels/rtl-prompt-fs6ygs462rbt",
+        baseModel: "gemini-1.5-flash"
       },
-      testResults: {
-        rawResponse: score,
-        isValidScore: isValidScore,
-        parsedScore: isValidScore ? numScore : null
-      },
+      results: results,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error("Error testing Gemini model:", error);
+    console.error("Error comparing models:", error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -170,8 +192,7 @@ exports.fetchNews = functions.https.onRequest(async (req, res) => {
 async function askGemini(summary, model) {
   try {
     const prompt = `Please provide a sentiment analysis score for the article summary added below. When calculating the score, consider the greater good of people living in the geographic region known as Israel / Palestine and the impact that's described in the text could have over their future. The score must be a floating point number between 0 and 1 (0 is negative sentiment and 1 is positive sentiment) with up to 6 decimal places. The answer should only contain the number, no additional characters, spaces, or line breaks.
-
-${summary}`;
+    Summary: ${summary}`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
