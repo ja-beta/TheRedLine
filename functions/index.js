@@ -2,19 +2,66 @@ const functions = require('firebase-functions/v2');
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
-// const model = genAI.GoogleGenerativeAI({model: "gemini-1.5-flash"});
-const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash", 
-  tuningModel: "RTL prompt"
-});
+
 
 admin.initializeApp();
 
+exports.testGemini = functions.https.onRequest(async (req, res) => {
+  try {
+    console.log("Starting Gemini model test...");
+
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
+    });
+
+    const testPrompt = `Please provide a sentiment analysis score for the following article summary. When calculating the score, consider the greater good of people living in the geographic region known as Israel / Palestine and the impact that's described in the text could have over their future. The score must be a floating point number between 0 and 1 (0 is negative sentiment and 1 is positive sentiment) with up to 6 decimal places.
+
+Summary: Peace talks between Israeli and Palestinian leaders show promising progress with both sides agreeing to humanitarian measures.`;
+
+    const result = await model.generateContent(testPrompt);
+    const response = await result.response;
+    const score = response.text().trim();
+
+    console.log("Test response from Gemini:", score);
+
+    const numScore = parseFloat(score);
+    const isValidScore = !isNaN(numScore) && numScore >= 0 && numScore <= 1;
+
+    res.status(200).json({
+      success: true,
+      modelInfo: {
+        baseModel: "gemini-1.5-flash",
+        tunedModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
+      },
+      testResults: {
+        rawResponse: score,
+        isValidScore: isValidScore,
+        parsedScore: isValidScore ? numScore : null
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error("Error testing Gemini model:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 
 exports.fetchNews = functions.https.onRequest(async (req, res) => {
+  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
+  const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash", 
+  tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
+});
+
   const API_KEY = process.env.NEWSCATCHER_API_KEY;
-  const GAS_API_KEY = process.env.GOOGLE_AI_STUDIO_API_KEY;
   let pendingScoreUpdates = 0;
   const BATCH_THRESHOLD = 5;
 
@@ -34,7 +81,7 @@ exports.fetchNews = functions.https.onRequest(async (req, res) => {
   };
 
   try {
-    
+
     console.log("Fetching latest headlines from NewsCatcher API...");
     const response = await fetch(url, options);
     if (!response.ok) {
@@ -71,7 +118,7 @@ exports.fetchNews = functions.https.onRequest(async (req, res) => {
       }
 
       try {
-        const score  = await askGemini(article.summary);
+        const score = await askGemini(article.summary, model);
         console.log(`Gemini score for article "${article.title}": ${score}`);
 
         const articleRef = await ref.push({
@@ -83,7 +130,7 @@ exports.fetchNews = functions.https.onRequest(async (req, res) => {
         });
 
         console.log(`New article created with key: ${articleRef.key}`);
-        
+
         pendingScoreUpdates++;
 
         if (pendingScoreUpdates >= BATCH_THRESHOLD) {
@@ -120,54 +167,59 @@ exports.fetchNews = functions.https.onRequest(async (req, res) => {
 });
 
 
-async function askGemini(summary) {
+async function askGemini(summary, model) {
   try {
-      const prompt = `Please provide a sentiment analysis score for the article summary added below. When calculating the score, consider the greater good of people living in the geographic region known as Israel / Palestine and the impact that's described in the text could have over their future. The score must be a floating point number between 0 and 1 (0 is negative sentiment and 1 is positive sentiment) with up to 6 decimal places. The answer should only contain the number, no additional characters, spaces, or line breaks.
+    const prompt = `Please provide a sentiment analysis score for the article summary added below. When calculating the score, consider the greater good of people living in the geographic region known as Israel / Palestine and the impact that's described in the text could have over their future. The score must be a floating point number between 0 and 1 (0 is negative sentiment and 1 is positive sentiment) with up to 6 decimal places. The answer should only contain the number, no additional characters, spaces, or line breaks.
 
 ${summary}`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const rawResponse = response.text().trim();
-      
-      console.log(`Raw Gemini response for article: ${rawResponse}`);
-    
-      const score = parseFloat(rawResponse);
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const rawResponse = response.text().trim();
 
-      if (isNaN(score) || score < 0 || score > 1) {
-          throw new Error(`Invalid score format received: ${rawResponse}`);
-      }
+    console.log(`Raw Gemini response for article: ${rawResponse}`);
 
-      console.log(`Processed score: ${score}`);
-      return Number(score.toFixed(6));
+    const score = parseFloat(rawResponse);
+
+    if (isNaN(score) || score < 0 || score > 1) {
+      throw new Error(`Invalid score format received: ${rawResponse}`);
+    }
+
+    console.log(`Processed score: ${score}`);
+    return Number(score.toFixed(6));
 
   } catch (error) {
-      console.error("Error in askGemini:", error);
-      throw new Error(`Failed to get valid score: ${error.message}`);
+    console.error("Error in askGemini:", error);
+    throw new Error(`Failed to get valid score: ${error.message}`);
   }
 }
 
 async function retryPendingScores() {
+  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
+  const model = genAI.getGenerativeModel({
+    model: "gemini-1.5-flash", 
+    tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
+  });
   const newsRef = admin.database().ref('news-01');
   const snapshot = await newsRef.orderByChild('score').equalTo('pending').once('value');
   const pendingArticles = snapshot.val();
 
   if (!pendingArticles) {
-      console.log('No pending articles found');
-      return;
+    console.log('No pending articles found');
+    return;
   }
 
   console.log(`Found ${Object.keys(pendingArticles).length} pending articles`);
 
   for (const [key, article] of Object.entries(pendingArticles)) {
-      try {
-          console.log(`Processing pending article: ${article.title}`);
-          const score = await askGemini(article.summary);
-          await newsRef.child(key).update({ score: score });
-          console.log(`Updated score for article ${key}: ${score}`);
-      } catch (error) {
-          console.error(`Failed to update pending score for article ${key}:`, error);
-      }
+    try {
+      console.log(`Processing pending article: ${article.title}`);
+      const score = await askGemini(article.summary, model);
+      await newsRef.child(key).update({ score: score });
+      console.log(`Updated score for article ${key}: ${score}`);
+    } catch (error) {
+      console.error(`Failed to update pending score for article ${key}:`, error);
+    }
   }
 
   await calculateAndDisplayWeightedAverage();
