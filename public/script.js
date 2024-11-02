@@ -104,3 +104,56 @@ window.exportArticlesToCSV = function() {
         document.body.removeChild(link);
     });
 };
+
+//MQTT TESTING ___________________________________________________________________
+const MQTT_TOPIC = 'mainScore';
+
+const client = mqtt.connect('wss://theredline.cloud.shiftr.io', {
+    username: "theredline",
+    password: "thisisit"
+});
+
+client.on('connect', () => {
+    document.getElementById('status').textContent = 'Connection status: Connected';
+    client.subscribe('mainScore', { qos: 1 });
+});
+
+client.on('message', (topic, message) => {
+    document.getElementById('lastMessage').textContent = `Last message: ${message.toString()}`;
+});
+
+client.on('error', (err) => {
+    document.getElementById('status').textContent = `Connection status: Error - ${err}`;
+});
+
+function sendTestScore(score) {
+    const message = JSON.stringify({ score: score });
+    client.publish('mainScore', message, { qos: 1 }, (err) => {
+        if (err) {
+            console.error('Failed to publish message:', err);
+        } else {
+            console.log(`Published score to MQTT topic "${MQTT_TOPIC}":`, message);
+        }
+    });
+}
+
+async function resendCurrentScore() {
+    try {
+        const mainScoreRef = ref(db, 'mainScore');
+        onValue(mainScoreRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data && data.score !== undefined) {
+                sendTestScore(data.score);
+            } else {
+                console.error('Current score not found in database');
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching current score:', error);
+    }
+}
+
+
+// Make the functions globally available
+window.sendTestScore = sendTestScore;
+window.resendCurrentScore = resendCurrentScore;

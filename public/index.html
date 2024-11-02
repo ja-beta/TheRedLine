@@ -7,10 +7,20 @@
     <script defer src="/__/firebase/10.14.1/firebase-app-compat.js"></script>
     <script defer src="/__/firebase/10.14.1/firebase-database-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
     <div>
+      <div class="mqtt-wrapper">
+        <h2>MQTT Test Panel</h2>
+        <div id="status">Connection status: Disconnected</div>
+        <div id="lastMessage">Last message: None</div>
+        <button onclick="sendTestScore(0)">Send Score 0</button>
+        <button onclick="sendTestScore(0.5)">Send Score 0.5</button>
+        <button onclick="sendTestScore(1)">Send Score 1</button>
+        <button onclick="resendCurrentScore()">Resend Current Score</button>
+      </div>
       <button onclick="exportArticlesToCSV()">Export to CSV</button>
       <div class="score-wrapper">
         <h2 class="title">→ current total score:</h2>
