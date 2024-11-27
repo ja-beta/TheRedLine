@@ -33,7 +33,7 @@ function updateMainScoreUI(score) {
 }
 
 function displayArticles() {
-    const articlesRef = ref(db, 'news');
+    const articlesRef = ref(db, 'news-01');
     onValue(articlesRef, (snapshot) => {
         const articles = snapshot.val();
         const articleList = document.getElementById('article-list');
@@ -44,8 +44,14 @@ function displayArticles() {
             return;
         }
 
-        Object.keys(articles).forEach(key => {
-            const article = articles[key];
+        const sortedArticles = Object.entries(articles)
+            .map(([key, article]) => ({
+                ...article,
+                key
+            }))
+            .sort((a, b) => b.timestamp - a.timestamp);  
+
+        sortedArticles.forEach(article => {
             const articleElement = createArticleElement(article);
             articleList.appendChild(articleElement);
         });
@@ -74,7 +80,7 @@ function createArticleElement(article) {
 
 
 window.exportArticlesToCSV = function() {
-    const articlesRef = ref(db, 'news');
+    const articlesRef = ref(db, 'news-01');
     
     onValue(articlesRef, (snapshot) => {
         const articles = snapshot.val();

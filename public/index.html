@@ -13,11 +13,15 @@
   <body>
     <div>
       <div class="mqtt-wrapper">
-        <h2>MQTT Test Panel</h2>
+        <h2 class="title">→ MQTT Test Panel</h2>
         <div id="status">Connection status: Disconnected</div>
         <div id="lastMessage">Last message: None</div>
         <button onclick="sendTestScore(0)">Send Score 0</button>
+        <button onclick="sendTestScore(0.1)">Send Score 0.1</button>
+        <button onclick="sendTestScore(0.15)">Send Score 0.15</button>
+        <button onclick="sendTestScore(0.25)">Send Score 0.25</button>
         <button onclick="sendTestScore(0.5)">Send Score 0.5</button>
+        <button onclick="sendTestScore(0.75)">Send Score 0.75</button>
         <button onclick="sendTestScore(1)">Send Score 1</button>
         <button onclick="resendCurrentScore()">Resend Current Score</button>
       </div>
