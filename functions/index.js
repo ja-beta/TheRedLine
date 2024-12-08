@@ -92,135 +92,135 @@ Summary: ${testCase}`;
 });
 
 
-exports.scheduledNewsFetch = onSchedule('every 5 minutes', async (context) =>
-   {
-    try {
-      // Check config
-      const configRef = admin.database().ref('config/newsFetching');
-      const config = (await configRef.once('value')).val();
+exports.scheduledNewsFetch = onSchedule('every 5 minutes', async (context) => {
+  try {
+    // Check config
+    const configRef = admin.database().ref('config/newsFetching');
+    const config = (await configRef.once('value')).val();
 
-      if (!config.enabled) {
-        console.log('News fetching is disabled');
-        return null;
-      }
-
-      const currentTime = Date.now();
-      const timeSinceLastFetch = currentTime - config.lastFetchTime;
-      const intervalMs = config.intervalMinutes * 60 * 1000;
-
-      if (timeSinceLastFetch < intervalMs) {
-        console.log('Not enough time has passed since last fetch');
-        return null;
-      }
-
-      // Initialize AI and API
-      const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
-      const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
-        tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
-      });
-
-      const API_KEY = process.env.NEWSCATCHER_API_KEY;
-      let pendingScoreUpdates = 0;
-      const BATCH_THRESHOLD = 2;
-
-      if (!API_KEY) {
-        console.error("NewsCatcher API key is missing.");
-        return null;
-      }
-
-      const url = 'https://api.newscatcherapi.com/v2/latest_headlines?lang=en&when=1h&page_size=100&topic=news';
-      const options = {
-        method: 'GET',
-        headers: {
-          'x-api-key': API_KEY,
-        },
-      };
-
-      // Fetch and process news
-      console.log("Fetching latest headlines from NewsCatcher API...");
-      const response = await fetch(url, options);
-      if (!response.ok) {
-        console.error(`NewsCatcher API request failed. Status: ${response.status}`);
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log("NewsCatcher API response received");
-
-      const filteredArticles = result.articles.filter(article => {
-        const summary = article.summary.toLowerCase();
-        const matches = summary.includes('israel') || summary.includes('israeli');
-        if (matches) {
-          console.log(`Article matches criteria: ${article.title}`);
-        }
-        return matches;
-      });
-      console.log(`Found ${filteredArticles.length} matching articles`);
-
-      if (filteredArticles.length === 0) {
-        console.warn("No articles found that match the criteria.");
-        await configRef.update({ lastFetchTime: currentTime });
-        return null;
-      }
-
-      // Process and store articles
-      const ref = admin.database().ref('news-01');
-      const writePromises = filteredArticles.map(async (article) => {
-        const existingArticleSnapshot = await ref.orderByChild('title').equalTo(article.title).once('value');
-        if (existingArticleSnapshot.exists()) {
-          console.log(`Article "${article.title}" already exists. Skipping...`);
-          return;
-        }
-
-        try {
-          const score = await askGemini(article.summary, model);
-          console.log(`Gemini score for article "${article.title}": ${score}`);
-
-          const articleRef = await ref.push({
-            title: article.title,
-            summary: article.summary,
-            link: article.link,
-            timestamp: Date.now(),
-            score: score,
-          });
-
-          console.log(`New article created with key: ${articleRef.key}`);
-          pendingScoreUpdates++;
-
-          if (pendingScoreUpdates >= BATCH_THRESHOLD) {
-            await calculateAndDisplayWeightedAverage();
-            pendingScoreUpdates = 0;
-          }
-
-        } catch (error) {
-          console.error(`Error processing article "${article.title}":`, error);
-          await ref.push({
-            title: article.title,
-            summary: article.summary,
-            link: article.link,
-            timestamp: Date.now(),
-            score: "pending"
-          });
-        }
-      });
-
-      await Promise.all(writePromises);
-      
-      if (pendingScoreUpdates > 0) {
-        await calculateAndDisplayWeightedAverage();
-      }
-
-      // Update last fetch time
-      await configRef.update({ lastFetchTime: currentTime });
-      console.log("News fetch completed successfully");
-      return null;
-
-    } catch (error) {
-      console.error('Error in scheduled news fetch:', error);
+    if (!config.enabled) {
+      console.log('News fetching is disabled');
       return null;
     }
-  });
+
+    const currentTime = Date.now();
+    const timeSinceLastFetch = currentTime - config.lastFetchTime;
+    const intervalMs = config.intervalMinutes * 60 * 1000;
+
+    if (timeSinceLastFetch < intervalMs) {
+      console.log('Not enough time has passed since last fetch');
+      return null;
+    }
+
+    // Initialize AI and API
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
+    });
+
+    const API_KEY = process.env.NEWSCATCHER_API_KEY;
+    let pendingScoreUpdates = 0;
+    const BATCH_THRESHOLD = 2;
+
+    if (!API_KEY) {
+      console.error("NewsCatcher API key is missing.");
+      return null;
+    }
+
+    const url = 'https://api.newscatcherapi.com/v2/latest_headlines?lang=en&when=1h&page_size=100&topic=news';
+    const options = {
+      method: 'GET',
+      headers: {
+        'x-api-key': API_KEY,
+      },
+    };
+
+    // Fetch and process news
+    console.log("Fetching latest headlines from NewsCatcher API...");
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      console.error(`NewsCatcher API request failed. Status: ${response.status}`);
+      throw new Error(`API request failed with status ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log("NewsCatcher API response received");
+
+    const filteredArticles = result.articles.filter(article => {
+      const summary = article.summary.toLowerCase();
+      const matches = summary.includes('israel') || summary.includes('israeli');
+      if (matches) {
+        console.log(`Article matches criteria: ${article.title}`);
+      }
+      return matches;
+    });
+    console.log(`Found ${filteredArticles.length} matching articles`);
+
+    if (filteredArticles.length === 0) {
+      console.warn("No articles found that match the criteria.");
+      await configRef.update({ lastFetchTime: currentTime });
+      return null;
+    }
+
+    // Process and store articles
+    const ref = admin.database().ref('news-01');
+    const writePromises = filteredArticles.map(async (article) => {
+      const existingArticleSnapshot = await ref.orderByChild('title').equalTo(article.title).once('value');
+      if (existingArticleSnapshot.exists()) {
+        console.log(`Article "${article.title}" already exists. Skipping...`);
+        return;
+      }
+
+      try {
+        const score = await askGemini(article.summary, model);
+        console.log(`Gemini score for article "${article.title}": ${score}`);
+
+        const articleRef = await ref.push({
+          title: article.title,
+          summary: article.summary,
+          link: article.link,
+          timestamp: Date.now(),
+          score: score,
+        });
+
+        console.log(`New article created with key: ${articleRef.key}`);
+        pendingScoreUpdates++;
+
+        if (pendingScoreUpdates >= BATCH_THRESHOLD) {
+          await calculateAndDisplayWeightedAverage();
+          pendingScoreUpdates = 0;
+        }
+
+      } catch (error) {
+        console.error(`Error processing article "${article.title}":`, error);
+        await ref.push({
+          title: article.title,
+          summary: article.summary,
+          link: article.link,
+          timestamp: Date.now(),
+          score: "pending"
+        });
+      }
+    });
+
+    await Promise.all(writePromises);
+
+    if (pendingScoreUpdates > 0) {
+      await calculateAndDisplayWeightedAverage();
+    }
+
+    await retryPendingScores();
+
+    await configRef.update({ lastFetchTime: currentTime });
+    console.log("News fetch completed successfully");
+    return null;
+
+  } catch (error) {
+    console.error('Error in scheduled news fetch:', error);
+    return null;
+  }
+});
 
 
 exports.updateNewsFetchingConfig = functions.https.onRequest(async (req, res) => {
@@ -256,7 +256,6 @@ exports.updateNewsFetchingConfig = functions.https.onRequest(async (req, res) =>
   }
 });
 
-// Add endpoint to get current config
 exports.updateNewsFetchingConfig = functions.https.onRequest(async (req, res) => {
   try {
     if (req.method !== 'POST') {
@@ -275,7 +274,7 @@ exports.updateNewsFetchingConfig = functions.https.onRequest(async (req, res) =>
 
     await configRef.update(updates);
     const updatedConfig = (await configRef.once('value')).val();
-    
+
     console.log('Config updated:', updatedConfig);
     res.status(200).json({
       success: true,
@@ -297,7 +296,7 @@ exports.getNewsFetchingConfig = functions.https.onRequest(async (req, res) => {
 
     const configRef = admin.database().ref('config/newsFetching');
     const config = (await configRef.once('value')).val();
-    
+
     console.log('Current config:', config);
     res.status(200).json({
       success: true,
@@ -310,12 +309,11 @@ exports.getNewsFetchingConfig = functions.https.onRequest(async (req, res) => {
   }
 });
 
-// Initialize config when deploying
 exports.initializeConfig = functions.https.onRequest(async (req, res) => {
   try {
     const configRef = admin.database().ref('config/newsFetching');
     const snapshot = await configRef.once('value');
-    
+
     if (!snapshot.exists()) {
       await configRef.set({
         enabled: true,
@@ -324,12 +322,12 @@ exports.initializeConfig = functions.https.onRequest(async (req, res) => {
       });
       console.log('Config initialized with default values');
     }
-    
+
     const currentConfig = (await configRef.once('value')).val();
-    res.status(200).json({ 
-      success: true, 
+    res.status(200).json({
+      success: true,
       message: 'Config initialized',
-      config: currentConfig 
+      config: currentConfig
     });
   } catch (error) {
     console.error('Error initializing config:', error);
@@ -430,16 +428,16 @@ async function updateMainScore(weightedAverage) {
   await mainScoreRef.set({ score: weightedAverage });
   console.log("Main score updated successfully.");
 
-  if (client.connected) {
-    const scoreMessage = JSON.stringify({ score: weightedAverage });
-    client.publish(MQTT_TOPIC, scoreMessage, { qos: 1 }, (err) => {
-      if (err) {
-        console.error('Failed to publish message:', err);
-      } else {
-        console.log(`Published score to MQTT topic "${MQTT_TOPIC}":`, scoreMessage);
-      }
-    });
-  }
+  // if (client.connected) {
+  //   const scoreMessage = JSON.stringify({ score: weightedAverage });
+  //   client.publish(MQTT_TOPIC, scoreMessage, { qos: 1 }, (err) => {
+  //     if (err) {
+  //       console.error('Failed to publish message:', err);
+  //     } else {
+  //       console.log(`Published score to MQTT topic "${MQTT_TOPIC}":`, scoreMessage);
+  //     }
+  //   });
+  // }
 }
 
 
@@ -453,6 +451,9 @@ const MQTT_USERNAME = "theredline";
 const MQTT_PASSWORD = "thisisit";
 const MQTT_TOPIC = "mainScore";
 
+let lastPublishedScore = null;
+const PUBLISH_THRESHOLD = 0.00001;
+
 const client = mqtt.connect(MQTT_BROKER_URL, {
   username: MQTT_USERNAME,
   password: MQTT_PASSWORD
@@ -463,15 +464,18 @@ mainScoreRef.on('value', (snapshot) => {
   const score = snapshot.val()?.score || 0;
   console.log(`Score changed in Firebase: ${score}`);
 
-  if (client.connected) {
-    const scoreMessage = JSON.stringify({ score: score });
-    client.publish(MQTT_TOPIC, scoreMessage, { qos: 1 }, (err) => {
-      if (err) {
-        console.error('Failed to publish message:', err);
-      } else {
-        console.log(`Published score to MQTT topic "${MQTT_TOPIC}":`, scoreMessage);
-      }
-    });
+  if (lastPublishedScore === null || Math.abs(score - lastPublishedScore) > PUBLISH_THRESHOLD) {
+
+    if (client.connected) {
+      const scoreMessage = JSON.stringify({ score: score });
+      client.publish(MQTT_TOPIC, scoreMessage, { qos: 1 }, (err) => {
+        if (err) {
+          console.error('Failed to publish message:', err);
+        } else {
+          console.log(`Published score to MQTT topic "${MQTT_TOPIC}":`, scoreMessage);
+        }
+      });
+    }
   }
 });
 
