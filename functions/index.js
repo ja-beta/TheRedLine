@@ -404,7 +404,7 @@ async function calculateAndDisplayWeightedAverage() {
   let totalWeightedScore = 0;
   let totalWeight = 0;
 
-  const decayConstant = 14 * 24 * 60 * 60 * 1000;  // 2 weeks (its days * hrs * mins * secs * ms)
+  const decayConstant = 1 * 2 * 60 * 60 * 1000;  // (its days * hrs * mins * secs * ms)
 
   keys.forEach((key) => {
     const article = articles[key];
@@ -428,16 +428,16 @@ async function updateMainScore(weightedAverage) {
   await mainScoreRef.set({ score: weightedAverage });
   console.log("Main score updated successfully.");
 
-  // if (client.connected) {
-  //   const scoreMessage = JSON.stringify({ score: weightedAverage });
-  //   client.publish(MQTT_TOPIC, scoreMessage, { qos: 1 }, (err) => {
-  //     if (err) {
-  //       console.error('Failed to publish message:', err);
-  //     } else {
-  //       console.log(`Published score to MQTT topic "${MQTT_TOPIC}":`, scoreMessage);
-  //     }
-  //   });
-  // }
+  if (client.connected) {
+    const scoreMessage = JSON.stringify({ score: weightedAverage });
+    client.publish(MQTT_TOPIC, scoreMessage, { qos: 1 }, (err) => {
+      if (err) {
+        console.error('Failed to publish message:', err);
+      } else {
+        console.log(`Published score to MQTT topic "${MQTT_TOPIC}":`, scoreMessage);
+      }
+    });
+  }
 }
 
 
@@ -452,7 +452,7 @@ const MQTT_PASSWORD = "thisisit";
 const MQTT_TOPIC = "mainScore";
 
 let lastPublishedScore = null;
-const PUBLISH_THRESHOLD = 0.00001;
+const PUBLISH_THRESHOLD = 0.000001;
 
 const client = mqtt.connect(MQTT_BROKER_URL, {
   username: MQTT_USERNAME,
@@ -468,10 +468,11 @@ mainScoreRef.on('value', (snapshot) => {
 
     if (client.connected) {
       const scoreMessage = JSON.stringify({ score: score });
-      client.publish(MQTT_TOPIC, scoreMessage, { qos: 1 }, (err) => {
+      client.publish(MQTT_TOPIC, scoreMessage, { qos: 1, retain: true }, (err) => {
         if (err) {
           console.error('Failed to publish message:', err);
         } else {
+          lastPublishedScore = score;
           console.log(`Published score to MQTT topic "${MQTT_TOPIC}":`, scoreMessage);
         }
       });

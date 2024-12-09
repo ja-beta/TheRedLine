@@ -159,7 +159,21 @@ async function resendCurrentScore() {
     }
 }
 
+function sendCustomScore() {
+    const scoreInput = document.getElementById('customScore');
+    const score = parseFloat(scoreInput.value);
+    
+    if (isNaN(score) || score < 0 || score > 1) {
+        alert('Please enter a valid score between 0 and 1');
+        return;
+    }
+    
+    sendTestScore(score);
+    scoreInput.value = ''; 
+}
+
 
 // Make the functions globally available
 window.sendTestScore = sendTestScore;
 window.resendCurrentScore = resendCurrentScore;
+window.sendCustomScore = sendCustomScore;

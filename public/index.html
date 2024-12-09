@@ -24,6 +24,17 @@
         <button onclick="sendTestScore(0.75)">Send Score 0.75</button>
         <button onclick="sendTestScore(1)">Send Score 1</button>
         <button onclick="resendCurrentScore()">Resend Current Score</button>
+        <div class="custom-score">
+          <input 
+            type="number" 
+            id="customScore" 
+            min="0" 
+            max="1" 
+            step="0.0001" 
+            placeholder="Enter score"
+          >
+          <button onclick="sendCustomScore()">Send Custom Score</button>
+        </div>
       </div>
       <button onclick="exportArticlesToCSV()">Export to CSV</button>
       <div class="score-wrapper">
