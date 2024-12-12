@@ -121,7 +121,7 @@ exports.scheduledNewsFetch = onSchedule('every 5 minutes', async (context) => {
 
     const API_KEY = process.env.NEWSCATCHER_API_KEY;
     let pendingScoreUpdates = 0;
-    const BATCH_THRESHOLD = 2;
+    const BATCH_THRESHOLD = 1;
 
     if (!API_KEY) {
       console.error("NewsCatcher API key is missing.");
@@ -404,7 +404,7 @@ async function calculateAndDisplayWeightedAverage() {
   let totalWeightedScore = 0;
   let totalWeight = 0;
 
-  const decayConstant = 1 * 2 * 60 * 60 * 1000;  // (its days * hrs * mins * secs * ms)
+  const decayConstant = 1 * 5 * 60 * 60 * 1000;  // (its days * hrs * mins * secs * ms)
 
   keys.forEach((key) => {
     const article = articles[key];
