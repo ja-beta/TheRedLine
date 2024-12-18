@@ -404,7 +404,7 @@ async function calculateAndDisplayWeightedAverage() {
   let totalWeightedScore = 0;
   let totalWeight = 0;
 
-  const decayConstant = 1 * 5 * 60 * 60 * 1000;  // (its days * hrs * mins * secs * ms)
+  const decayConstant = 1 * 2 * 60 * 60 * 1000;  // (its days * hrs * mins * secs * ms)
 
   keys.forEach((key) => {
     const article = articles[key];
