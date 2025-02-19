@@ -226,39 +226,6 @@ exports.scheduledNewsFetch = onSchedule('every 5 minutes', async (context) => {
 exports.updateNewsFetchingConfig = functions.https.onRequest(async (req, res) => {
   try {
     if (req.method !== 'POST') {
-      res.status(405).send('Method Not Allowed');
-      return;
-    }
-
-    const { enabled, intervalMinutes } = req.body;
-    const configRef = admin.database().ref('config/newsFetching');
-
-    if (enabled !== undefined) {
-      await configRef.update({ enabled: enabled });
-    }
-
-    if (intervalMinutes !== undefined && intervalMinutes >= 1) {
-      await configRef.update({ intervalMinutes: intervalMinutes });
-    }
-
-    const updatedConfig = (await configRef.once('value')).val();
-    res.status(200).json({
-      success: true,
-      config: updatedConfig
-    });
-
-  } catch (error) {
-    console.error('Error updating config:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-exports.updateNewsFetchingConfig = functions.https.onRequest(async (req, res) => {
-  try {
-    if (req.method !== 'POST') {
       res.status(405).json({ success: false, error: 'Method not allowed' });
       return;
     }
