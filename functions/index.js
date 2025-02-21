@@ -4,10 +4,16 @@ const admin = require('firebase-admin');
 const fetch = require('node-fetch');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const mqtt = require('mqtt');
+const path = require('path');
 
-const NEWS_COLLECTION = 'news-02';  
+const COLLECTION = "news-02";  
 
-admin.initializeApp();
+const serviceAccount = require(path.join(__dirname, 'creds.json'));
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: 'https://theredline-jn-default-rtdb.firebaseio.com'
+});
 
 async function initializeConfigIfNeeded() {
   const configRef = admin.database().ref('config');
@@ -107,14 +113,16 @@ exports.scheduledNewsFetch = onSchedule('every 2 minutes', async (context) => {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
     const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
-      tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
+      tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt",
+      temperature: 0.7,
+      topP: 0.9
     });
 
     let pendingScoreUpdates = 0;
     const BATCH_THRESHOLD = 1;
 
     // Get unprocessed articles
-    const newsRef = admin.database().ref(NEWS_COLLECTION);
+    const newsRef = admin.database().ref(COLLECTION);
     const snapshot = await newsRef.orderByChild('processed')
                                  .equalTo('pending')
                                  .once('value');
@@ -147,7 +155,8 @@ exports.scheduledNewsFetch = onSchedule('every 2 minutes', async (context) => {
       }
 
       try {
-        const score = await askGemini(article.summary, model);
+        console.log(`Sending summary to Gemini: Summary Content: ${article.content}`);
+        const score = await askGemini(article.content, model);
         console.log(`Gemini score for article "${article.title}": ${score}`);
 
         await newsRef.child(key).update({
@@ -270,7 +279,7 @@ exports.initializeConfig = functions.https.onRequest(async (req, res) => {
 
 async function askGemini(summary, model) {
   try {
-    const prompt = `Please provide a sentiment analysis score for the article summary added below. When calculating the score, consider the greater good of people living in the geographic region known as Israel / Palestine and the impact that's described in the text could have over their future. The score must be a floating point number between 0 and 1 (0 is negative sentiment and 1 is positive sentiment) with up to 6 decimal places. The answer should only contain the number, no additional characters, spaces, or line breaks.
+    const prompt = `Please provide an analysis score for the article summary added below. When calculating the score, consider the greater good of people living in the geographic region known as Israel / Palestine and the impact that's described in the text could have over their future. The score must be a floating point number between 0 and 1 (0 is extremely negative impact and 1 is extremely positive impact) with up to 6 decimal places. The answer should only contain the number, no additional characters, spaces, or line breaks.
     Summary: ${summary}`;
 
     const result = await model.generateContent(prompt);
@@ -298,10 +307,12 @@ async function retryPendingScores() {
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
   const model = genAI.getGenerativeModel({
     model: "gemini-1.5-flash",
-    tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
+    tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt",
+    temperature: 0.7,
+    topP: 0.9
   });
   
-  const newsRef = admin.database().ref(NEWS_COLLECTION);
+  const newsRef = admin.database().ref(COLLECTION);
   const snapshot = await newsRef.orderByChild('score').equalTo('pending').once('value');
   const pendingArticles = snapshot.val();
 
@@ -315,7 +326,7 @@ async function retryPendingScores() {
   for (const [key, article] of Object.entries(pendingArticles)) {
     try {
       console.log(`Processing pending article: ${article.title}`);
-      const score = await askGemini(article.summary, model);
+      const score = await askGemini(article.content, model);
       await newsRef.child(key).update({ score: score });
       console.log(`Updated score for article ${key}: ${score}`);
     } catch (error) {
@@ -327,7 +338,7 @@ async function retryPendingScores() {
 }
 
 async function calculateAndDisplayWeightedAverage() {
-  const newsRef = admin.database().ref(NEWS_COLLECTION);
+  const newsRef = admin.database().ref(COLLECTION);
   const snapshot = await newsRef.once('value');
   const articles = snapshot.val();
   const keys = Object.keys(articles || {});
@@ -431,4 +442,6 @@ client.on('connect', () => {
 
 client.on('error', (err) => {
   console.error('MQTT error:', err);
-});//#endregion
+});
+
+//#endregion
