@@ -1,10 +1,18 @@
+from flask import Flask
 from firebase_init import db
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
 from config import KEYWORDS, NEWS_COLLECTION, MAX_ARTICLES_PER_SITE
 import requests
 from bs4 import BeautifulSoup
 import time
 from requests.exceptions import RequestException, Timeout
 import random
+import os  
+
+app = Flask(__name__)
+
 
 NEWS_SITES = {
     "BBC": {
@@ -161,15 +169,12 @@ def get_content_start(content, words=10):
 def store_article(article, source):
     """Store article in Firebase"""
     try:
-        # Get the first N words of the article content
         content_start = get_content_start(article["content"])
         
-        # Check for existing articles with same content start
-        existing_articles = db.get()
+        existing_articles = db.get()  
         
         if existing_articles:
-            # Check each article for similar content
-            for existing in existing_articles.values():
+            for article_id, existing in existing_articles.items():
                 if 'content' in existing:
                     existing_start = get_content_start(existing['content'])
                     if existing_start == content_start:
@@ -185,7 +190,7 @@ def store_article(article, source):
             "processed": "pending"
         }
         
-        db.push(article_data)
+        db.push(article_data)  
         print(f"Stored article: {article['title']}")
         return True
         
@@ -193,7 +198,7 @@ def store_article(article, source):
         print(f"Error storing article: {e}")
         return False
 
-def main():
+def scrape_news():
     articles_processed = 0
     target_articles_per_site = MAX_ARTICLES_PER_SITE  
     
@@ -243,5 +248,14 @@ def main():
     print(f"\nScript completed. Processed {articles_processed} new articles across all sites.")
     return articles_processed
 
-if __name__ == "__main__":
-    main()
+@app.route('/', methods=['GET']) # Define a route for the root path '/'
+def run_scraper():
+    print("Scraping function triggered!") # Log when the function starts
+    news = scrape_news()
+    if news:
+        return "Scraping completed and data stored in Firestore", 200 # Return a success message
+    else:
+        return "Scraping failed", 500 # Return an error message if scraping fails
+
+if __name__ == '__main__':
+    app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 8080))) # Start Flask app, listen on port from PORT env var or 8080

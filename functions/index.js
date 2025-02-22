@@ -98,7 +98,11 @@ Summary: ${testCase}`;
   }
 });
 
-exports.scheduledNewsFetch = onSchedule('every 2 minutes', async (context) => {
+exports.scheduledNewsFetch = onSchedule({
+  schedule: 'every 2 minutes',
+  region: 'us-central1',
+  invoker: 'service-290283837848@gcf-admin-robot.iam.gserviceaccount.com'
+}, async (context) => {
   try {
     // Check config
     const configRef = admin.database().ref('config/newsFetching');
