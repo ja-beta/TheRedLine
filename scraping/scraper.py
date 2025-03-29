@@ -123,7 +123,7 @@ def scrape_article(url, site_name, timeout=10):
         invalid_titles = {
             "Business", "Climate", "Sport", "Technology", "Entertainment",
             "NewsNews",
-            "Analysis", "Art & Design", "Movies", "Opinion", "Review",
+            "Analysis", "Art & Design", "Movies", "Review",
             "Menu", "Navigation", "Search"
         }
         

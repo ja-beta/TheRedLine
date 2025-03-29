@@ -6,7 +6,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const mqtt = require('mqtt');
 const path = require('path');
 
-const COLLECTION = "news-02";  
+const COLLECTION = "news-03";  
 
 const serviceAccount = require(path.join(__dirname, 'creds.json'));
 
@@ -22,7 +22,7 @@ async function initializeConfigIfNeeded() {
     await configRef.set({
       newsFetching: {
         enabled: true,
-        intervalMinutes: 2,
+        intervalMinutes: 10,
         lastFetchTime: 0
       }
     });
