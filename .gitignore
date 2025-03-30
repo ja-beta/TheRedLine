@@ -2,4 +2,6 @@ config.js
 firebase-credentials.json
 config.py
 creds.json
-
+config/settings.json
+functions/settings.json
+scraping/settings.json
