@@ -1,0 +1,17 @@
+{
+  "database": {
+    "collection": "news-03"
+  },
+  "scheduling": {
+    "intervalMinutes": 3
+  },
+  "mqtt": {
+    "brokerUrl": "mqtt://theredline.cloud.shiftr.io",
+    "username": "theredline",
+    "password": "thisisit",
+    "topic": "mainScore"
+  },
+  "gemini": {
+    "apiKey": "AIzaSyBqXIO3OY1QpQPYmGD9XsGABPFPEStt9_I"
+  }
+}

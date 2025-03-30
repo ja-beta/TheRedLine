@@ -1,4 +1,5 @@
 const functions = require('firebase-functions/v2');
+const { onRequest } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
@@ -6,7 +7,29 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const mqtt = require('mqtt');
 const path = require('path');
 
-const COLLECTION = "news-03";  
+
+let firebaseConfig = {};
+try {
+  if (process.env.FIREBASE_CONFIG) {
+    firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+  }
+} catch (e) {
+  console.error('Error parsing FIREBASE_CONFIG:', e);
+}
+
+const COLLECTION = 
+  (process.env.DB_COLLECTION) || 
+  (firebaseConfig.db && firebaseConfig.db.collection) ||
+  'news-03';
+const INTERVAL_MINUTES = parseInt(
+  process.env.INTERVAL_MINUTES || 
+  (firebaseConfig.interval && firebaseConfig.interval.minutes) || 
+  '10', 10);
+const GEMINI_API_KEY = 
+  process.env.GOOGLE_AI_STUDIO_API_KEY ||
+  (firebaseConfig.gemini && firebaseConfig.gemini.api_key);
+
+console.log(`Using collection: ${COLLECTION}`);
 
 const serviceAccount = require(path.join(__dirname, 'creds.json'));
 
@@ -14,6 +37,8 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: 'https://theredline-jn-default-rtdb.firebaseio.com'
 });
+
+
 
 async function initializeConfigIfNeeded() {
   const configRef = admin.database().ref('config');
@@ -29,92 +54,83 @@ async function initializeConfigIfNeeded() {
   }
 }
 
-exports.compareModels = functions.https.onRequest(async (req, res) => {
+// exports.compareModels = functions.https.onRequest(async (req, res) => {
+//   try {
+//     console.log("Starting model comparison test...");
+
+//     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
+
+//     const tunedModel = genAI.getGenerativeModel({
+//       model: "gemini-1.5-flash",
+//       tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
+//     });
+
+//     const baseModel = genAI.getGenerativeModel({
+//       model: "gemini-1.5-flash"
+//     });
+
+//     const testCases = [
+//       "Peace talks between Israeli and Palestinian leaders show promising progress with both sides agreeing to humanitarian measures.",
+//       "Violent clashes erupted at the border, resulting in casualties on both sides.",
+//       "New economic cooperation agreement signed between Israeli and Palestinian businesses.",
+//       "Protests against the ongoing conflict continue to grow in major cities.",
+//       "Joint Israeli-Palestinian youth education program launches in Jerusalem."
+//     ];
+
+//     const results = [];
+
+//     for (const testCase of testCases) {
+//       const prompt = `Please provide a sentiment analysis score for the article summary added below. When calculating the score, consider the greater good of people living in the geographic region known as Israel / Palestine and the impact that's described in the text could have over their future. The score must be a floating point number between 0 and 1 (0 is negative sentiment and 1 is positive sentiment) with up to 6 decimal places. The answer should only contain the number, no additional characters, spaces, or line breaks.
+
+// Summary: ${testCase}`;
+
+//       const tunedResult = await tunedModel.generateContent(prompt);
+//       const baseResult = await baseModel.generateContent(prompt);
+
+//       const tunedResponse = tunedResult.response.text().trim();
+//       const baseResponse = baseResult.response.text().trim();
+
+//       results.push({
+//         summary: testCase,
+//         tunedModel: {
+//           response: tunedResponse,
+//           parsedScore: parseFloat(tunedResponse)
+//         },
+//         baseModel: {
+//           response: baseResponse,
+//           parsedScore: parseFloat(baseResponse)
+//         }
+//       });
+//     }
+
+//     return {
+//       success: true,
+//       modelInfo: {
+//         tunedModel: "tunedModels/rtl-prompt-fs6ygs462rbt",
+//         baseModel: "gemini-1.5-flash"
+//       },
+//       results: results,
+//       timestamp: new Date().toISOString()
+//     };
+
+//   } catch (error) {
+//     console.error("Error comparing models:", error);
+//     throw new functions.https.HttpsError('internal', error.message);
+//   }
+// });
+
+exports.scheduledNewsFetch = functions.https.onRequest(async (req, res) => {
   try {
-    console.log("Starting model comparison test...");
-
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
-
-    const tunedModel = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt"
-    });
-
-    const baseModel = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash"
-    });
-
-    const testCases = [
-      "Peace talks between Israeli and Palestinian leaders show promising progress with both sides agreeing to humanitarian measures.",
-      "Violent clashes erupted at the border, resulting in casualties on both sides.",
-      "New economic cooperation agreement signed between Israeli and Palestinian businesses.",
-      "Protests against the ongoing conflict continue to grow in major cities.",
-      "Joint Israeli-Palestinian youth education program launches in Jerusalem."
-    ];
-
-    const results = [];
-
-    for (const testCase of testCases) {
-      const prompt = `Please provide a sentiment analysis score for the article summary added below. When calculating the score, consider the greater good of people living in the geographic region known as Israel / Palestine and the impact that's described in the text could have over their future. The score must be a floating point number between 0 and 1 (0 is negative sentiment and 1 is positive sentiment) with up to 6 decimal places. The answer should only contain the number, no additional characters, spaces, or line breaks.
-
-Summary: ${testCase}`;
-
-      const tunedResult = await tunedModel.generateContent(prompt);
-      const baseResult = await baseModel.generateContent(prompt);
-
-      const tunedResponse = tunedResult.response.text().trim();
-      const baseResponse = baseResult.response.text().trim();
-
-      results.push({
-        summary: testCase,
-        tunedModel: {
-          response: tunedResponse,
-          parsedScore: parseFloat(tunedResponse)
-        },
-        baseModel: {
-          response: baseResponse,
-          parsedScore: parseFloat(baseResponse)
-        }
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      modelInfo: {
-        tunedModel: "tunedModels/rtl-prompt-fs6ygs462rbt",
-        baseModel: "gemini-1.5-flash"
-      },
-      results: results,
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    console.error("Error comparing models:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-exports.scheduledNewsFetch = onSchedule({
-  schedule: 'every 2 minutes',
-  region: 'us-central1',
-  invoker: 'service-290283837848@gcf-admin-robot.iam.gserviceaccount.com'
-}, async (context) => {
-  try {
-    // Check config
     const configRef = admin.database().ref('config/newsFetching');
     const config = (await configRef.once('value')).val();
 
     if (!config.enabled) {
       console.log('News fetching is disabled');
-      return null;
+      res.status(200).json({ success: true, message: 'News fetching is disabled' });
+      return;
     }
 
-    // Initialize AI 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_STUDIO_API_KEY);
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
       tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt",
@@ -125,22 +141,27 @@ exports.scheduledNewsFetch = onSchedule({
     let pendingScoreUpdates = 0;
     const BATCH_THRESHOLD = 1;
 
-    // Get unprocessed articles
-    const newsRef = admin.database().ref(COLLECTION);
-    const snapshot = await newsRef.orderByChild('processed')
-                                 .equalTo('pending')
-                                 .once('value');
-    const unprocessedArticles = snapshot.val() || {};
+    console.log(`Looking for pending articles in collection: ${COLLECTION}`);
     
+    const newsRef = admin.database().ref(COLLECTION);
+    
+    const allArticles = await newsRef.once('value');
+    console.log(`Total articles in database: ${Object.keys(allArticles.val() || {}).length}`);
+    
+    const snapshot = await newsRef.orderByChild('processed')
+                             .equalTo('pending')
+                             .once('value');
+                             
+    const unprocessedArticles = snapshot.val() || {};
     console.log(`Found ${Object.keys(unprocessedArticles).length} pending articles`);
 
     if (Object.keys(unprocessedArticles).length === 0) {
-      console.log('No new articles to process');
-      await configRef.update({ lastFetchTime: Date.now() });
-      return null;
+      console.log('No pending articles found');
+      await calculateMainScore();
+      res.status(200).json({ success: true, message: 'News fetch completed successfully' });
+      return;
     }
 
-    // Process articles
     const writePromises = Object.entries(unprocessedArticles).map(async ([key, article]) => {
       const existingArticleSnapshot = await newsRef.orderByChild('title').equalTo(article.title).once('value');
       if (existingArticleSnapshot.exists()) {
@@ -194,21 +215,16 @@ exports.scheduledNewsFetch = onSchedule({
     await retryPendingScores();
     await configRef.update({ lastFetchTime: Date.now() });
     console.log("News fetch completed successfully");
-    return null;
+    res.status(200).json({ success: true, message: 'News fetch completed' });
 
   } catch (error) {
     console.error('Error in scheduled news fetch:', error);
-    return null;
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 exports.updateNewsFetchingConfig = functions.https.onRequest(async (req, res) => {
   try {
-    if (req.method !== 'POST') {
-      res.status(405).json({ success: false, error: 'Method not allowed' });
-      return;
-    }
-
     const configRef = admin.database().ref('config/newsFetching');
     const { enabled, intervalMinutes } = req.body;
 
@@ -229,17 +245,15 @@ exports.updateNewsFetchingConfig = functions.https.onRequest(async (req, res) =>
 
   } catch (error) {
     console.error('Error updating config:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 
 exports.getNewsFetchingConfig = functions.https.onRequest(async (req, res) => {
   try {
-    if (req.method !== 'GET') {
-      res.status(405).json({ success: false, error: 'Method not allowed' });
-      return;
-    }
-
     const configRef = admin.database().ref('config/newsFetching');
     const config = (await configRef.once('value')).val();
 
@@ -251,7 +265,10 @@ exports.getNewsFetchingConfig = functions.https.onRequest(async (req, res) => {
 
   } catch (error) {
     console.error('Error getting config:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 
@@ -277,8 +294,15 @@ exports.initializeConfig = functions.https.onRequest(async (req, res) => {
     });
   } catch (error) {
     console.error('Error initializing config:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
+});
+
+exports.healthCheck = functions.https.onRequest((req, res) => {
+  res.status(200).send('OK');
 });
 
 async function askGemini(summary, model) {
@@ -447,5 +471,143 @@ client.on('connect', () => {
 client.on('error', (err) => {
   console.error('MQTT error:', err);
 });
+
+
+//this is triggered by the scraper.py script! 
+exports.triggerNewsFetch = functions.https.onRequest(async (req, res) => {
+  try {
+    const configRef = admin.database().ref('config/newsFetching');
+    const config = (await configRef.once('value')).val();
+
+    if (!config.enabled) {
+      console.log('News fetching is disabled');
+      res.status(200).json({ success: true, message: 'News fetching is disabled' });
+      return;
+    }
+
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'News fetch completed successfully' 
+    });
+
+  } catch (error) {
+    console.error('Error in manual news fetch:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+exports.processNewArticle = functions.database.onValueCreated(
+  `/${COLLECTION}/{articleId}`,
+  async (event) => {
+    try {
+      const articleId = event.params.articleId;
+      const article = event.data.val();
+      
+      console.log(`New article detected: "${article.title || 'Untitled'}"`);
+      
+      if (!article || article.processed !== 'pending') {
+        console.log('Article is not pending, skipping processing');
+        return null;
+      }
+      
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        tuningModel: "tunedModels/rtl-prompt-fs6ygs462rbt",
+        temperature: 0.7,
+        topP: 0.9
+      });
+      
+      console.log(`Processing article: "${article.title}"`);
+      
+      try {
+        console.log(`Sending content to Gemini: Content length: ${article.content?.length || 0}`);
+        const score = await askGemini(article.content, model);
+        console.log(`Gemini score for article: ${score}`);
+        
+        await admin.database().ref(`${COLLECTION}/${articleId}`).update({
+          processed: 'complete',
+          score: score
+        });
+        
+        console.log(`Updated article ${articleId} with score: ${score}`);
+        
+        await calculateMainScore();
+        
+        return null;
+      } catch (error) {
+        console.error(`Error processing article: ${error.message}`);
+        await admin.database().ref(`${COLLECTION}/${articleId}`).update({
+          processed: 'error',
+          error: error.message
+        });
+        return null;
+      }
+    } catch (error) {
+      console.error('Error in processNewArticle:', error);
+      return null;
+    }
+  }
+);
+
+
+async function calculateMainScore() {
+  try {
+    console.log('Calculating main score...');
+    
+    const mainScoreRef = admin.database().ref('mainScore');
+    const newsRef = admin.database().ref(COLLECTION);
+    
+    // Get all processed articles with scores
+    const snapshot = await newsRef
+      .orderByChild('processed')
+      .equalTo('complete')
+      .once('value');
+    
+    const scoredArticles = snapshot.val() || {};
+    
+    if (Object.keys(scoredArticles).length === 0) {
+      console.log('No scored articles found, keeping existing score');
+      return;
+    }
+    
+    let totalWeight = 0;
+    let weightedSum = 0;
+    
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000; 
+    
+    Object.entries(scoredArticles).forEach(([key, article]) => {
+      const age = now - article.timestamp;
+      const daysSinceAdded = age / oneDay;
+      
+      // Decay weight based on age
+      const weight = Math.exp(-0.1 * daysSinceAdded);
+      
+      console.log(`Article ${key}: score=${article.score}, weight=${weight}`);
+      
+      weightedSum += article.score * weight;
+      totalWeight += weight;
+    });
+    
+    let averageScore = totalWeight > 0 ? weightedSum / totalWeight : 0.5;
+    averageScore = Math.max(0, Math.min(1, averageScore)); // Clamp between 0 and 1
+    
+    console.log(`Calculated weighted average score: ${averageScore}`);
+    
+    await mainScoreRef.set({
+      score: averageScore,
+      lastUpdated: now
+    });
+    
+    console.log('Main score updated successfully.');
+  } catch (error) {
+    console.error('Error calculating main score:', error);
+  }
+}
 
 //#endregion

@@ -33,7 +33,7 @@ function updateMainScoreUI(score) {
 }
 
 function displayArticles() {
-    const articlesRef = ref(db, 'news-01');
+    const articlesRef = ref(db, 'news-03');
     onValue(articlesRef, (snapshot) => {
         const articles = snapshot.val();
         const articleList = document.getElementById('article-list');
@@ -49,7 +49,13 @@ function displayArticles() {
                 ...article,
                 key
             }))
-            .sort((a, b) => b.timestamp - a.timestamp);  
+            .sort((a, b) => {
+                // First sort by status - completed articles first, then pending
+                if (a.processed === 'complete' && b.processed !== 'complete') return -1;
+                if (a.processed !== 'complete' && b.processed === 'complete') return 1;
+                // Then sort by timestamp (newest first)
+                return (b.timestamp || 0) - (a.timestamp || 0);
+            });  
 
         sortedArticles.forEach(article => {
             const articleElement = createArticleElement(article);
@@ -61,26 +67,64 @@ function displayArticles() {
 function createArticleElement(article) {
     const articleDiv = document.createElement('div');
     articleDiv.classList.add('article');
+    
+    articleDiv.setAttribute('data-id', article.key);
+
+    if (article.processed) {
+        articleDiv.classList.add(`status-${article.processed}`);
+    }
 
     const title = document.createElement('h3');
-    title.textContent = article.title;
+    title.textContent = article.title || 'Untitled Article';
 
-    const summary = document.createElement('p');
-    summary.textContent = article.summary;
+    const source = document.createElement('p');
+    source.classList.add('source');
+    source.textContent = article.source || 'Unknown Source';
+    
+    const timestamp = document.createElement('p');
+    timestamp.classList.add('timestamp');
+    if (article.timestamp) {
+        const date = new Date(article.timestamp);
+        timestamp.textContent = `Published: ${date.toLocaleString()}`;
+    } else {
+        timestamp.textContent = 'Publication date unknown';
+    }
+
+    const content = document.createElement('p');
+    content.classList.add('content');
+    content.textContent = article.content || article.summary || 'No content available';
+
+    const status = document.createElement('p');
+    status.classList.add('status');
+    status.textContent = `Status: ${article.processed || 'Unknown'}`;
 
     const score = document.createElement('p');
-    score.textContent = `Score: ${article.score !== "pending" ? article.score.toFixed(6) : "Pending"}`;
+    score.classList.add('score');
+    
+    if (article.processed === 'complete' && article.score !== undefined) {
+        score.textContent = `Score: ${article.score.toFixed(6)}`;
+    } else if (article.processed === 'pending') {
+        score.textContent = 'Score: Pending analysis...';
+    } else if (article.processed === 'error') {
+        score.textContent = `Score: Error - ${article.error || 'Unknown error'}`;
+    } else if (article.processed === 'duplicate') {
+        score.textContent = 'Score: Duplicate article (skipped)';
+    } else {
+        score.textContent = 'Score: Unknown';
+    }
 
     articleDiv.appendChild(title);
-    articleDiv.appendChild(summary);
+    articleDiv.appendChild(source);
+    articleDiv.appendChild(timestamp);
+    articleDiv.appendChild(content);
+    articleDiv.appendChild(status);
     articleDiv.appendChild(score);
 
     return articleDiv;
 }
 
-
 window.exportArticlesToCSV = function() {
-    const articlesRef = ref(db, 'news-01');
+    const articlesRef = ref(db, 'news-03');
     
     onValue(articlesRef, (snapshot) => {
         const articles = snapshot.val();
@@ -90,13 +134,25 @@ window.exportArticlesToCSV = function() {
             return;
         }
 
-        let csvContent = 'Summary,Score\n'; // Header row
+        let csvContent = 'Title,Source,Publication Date,Content,Status,Score\n';
 
         Object.values(articles).forEach(article => {
-            const cleanSummary = article.summary
+            const cleanTitle = (article.title || 'Untitled')
                 .replace(/"/g, '""')
                 .replace(/\n/g, ' ');
-            csvContent += `"${cleanSummary}",\n`;
+            const cleanSource = (article.source || 'Unknown')
+                .replace(/"/g, '""')
+                .replace(/\n/g, ' ');
+            const pubDate = article.timestamp ? 
+                new Date(article.timestamp).toISOString() : 'Unknown';
+            const cleanContent = (article.content || article.summary || 'No content')
+                .replace(/"/g, '""')
+                .replace(/\n/g, ' ');
+            const status = article.processed || 'Unknown';
+            const score = (article.processed === 'complete' && article.score !== undefined) ? 
+                article.score : 'N/A';
+            
+            csvContent += `"${cleanTitle}","${cleanSource}","${pubDate}","${cleanContent}","${status}","${score}"\n`;
         });
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -171,7 +227,6 @@ function sendCustomScore() {
     sendTestScore(score);
     scoreInput.value = ''; 
 }
-
 
 // Make the functions globally available
 window.sendTestScore = sendTestScore;
