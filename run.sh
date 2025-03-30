@@ -88,7 +88,7 @@ start() {
     SCRAPER_URL=$(gcloud run services describe $SCRAPER_SERVICE_ID --platform managed --region $LOCATION --format="value(status.url)")
     
     # Only run between 9AM and 9PM
-    SCHEDULE_FORMAT="*/${INTERVAL_MINUTES} 9-21 * * *"
+    SCHEDULE_FORMAT="*/${INTERVAL_MINUTES} 9-20 * * *"
     
     # Delete existing job if it exists
     gcloud scheduler jobs delete trl-news-fetch --location=$LOCATION --quiet 2>/dev/null || true
@@ -98,7 +98,8 @@ start() {
       --schedule="$SCHEDULE_FORMAT" \
       --uri="$SCRAPER_URL" \
       --http-method=GET \
-      --location=$LOCATION
+      --location=$LOCATION \
+      --time-zone="America/New_York"
       
     # Enable the news fetching configuration
     echo "Enabling news fetching configuration..."
@@ -221,17 +222,17 @@ stop_service() {
 }
 
 update() {
-    echo "Updating schedule to: $SCHEDULE"
+    echo "Updating schedule to: $SCHEDULE_FORMAT"
 
     gcloud scheduler jobs update http trl-scraper-job \
-        --schedule="$SCHEDULE" \
+        --schedule="$SCHEDULE_FORMAT" \
         --location="$LOCATION"
 
     curl -X POST "$CONFIG_SERVICE_URL" \
         -H "Content-Type: application/json" \
-        -d "{\"intervalMinutes\":${SCHEDULE#*/}}"
+        -d "{\"intervalMinutes\":${INTERVAL_MINUTES}}"
 
-    echo "Schedule updated to: $SCHEDULE"
+    echo "Schedule updated to: $SCHEDULE_FORMAT"
 }
 
 status() {
