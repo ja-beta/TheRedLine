@@ -1,50 +1,61 @@
 #!/bin/bash
 
-# Variables
-SCRAPER_SERVICE_ID="trl-scraper"  # Just the service name, not the full URL
-CONFIG_SERVICE_URL="https://updatenewsfetchingconfig-290283837848.us-central1.run.app"  # The actual config service URL
-SCHEDULE="*/2 * * * *"            # Every 2 minutes
-LOCATION="us-central1"            
-PROJECT_ID=$(gcloud config get-value project)  # Get project ID from current config
-EXPECTED_PROJECT_ID="your-trl-project-id"  # Define the expected project ID
+get_json_value() {
+  local file=$1
+  local key=$2
+  python -c "import json; print(json.load(open('$file'))$key)"
+}
 
-# At the top of your script, add this check
-if [[ "$PROJECT_ID" != "your-trl-project-id" ]]; then
-    echo "WARNING: You are not in the TRL project! Current project: $PROJECT_ID"
-    read -p "Continue anyway? (yes/no): " confirm
-    if [[ "$confirm" != "yes" ]]; then
-        echo "Exiting. Run 'gcloud config set project your-trl-project-id' first."
+# Variables
+SCRAPER_SERVICE_ID="trl-scraper" 
+CONFIG_SERVICE_URL="https://updatenewsfetchingconfig-inuqrflg3a-uc.a.run.app" 
+SCHEDULE="*/$INTERVAL_MINUTES * * * *"           
+LOCATION="us-central1"            
+PROJECT_ID="theredline-jn"
+EXPECTED_PROJECT_ID="theredline-jn"
+DB_COLLECTION=$(get_json_value "config/settings.json" "['database']['collection']")
+INTERVAL_MINUTES=$(get_json_value "config/settings.json" "['scheduling']['intervalMinutes']")
+GOOGLE_AI_STUDIO_API_KEY=$(get_json_value "config/settings.json" "['gemini']['apiKey']")
+
+GETNEWSFETCHINGCONFIG_URL="https://us-central1-theredline-jn.cloudfunctions.net/getNewsFetchingConfig"
+UPDATENEWSFETCHINGCONFIG_URL="https://us-central1-theredline-jn.cloudfunctions.net/updateNewsFetchingConfig"
+INITIALIZECONFIG_URL="https://us-central1-theredline-jn.cloudfunctions.net/initializeConfig"
+HEALTHCHECK_URL="https://us-central1-theredline-jn.cloudfunctions.net/healthCheck"
+TRIGGERNEWSFETCH_URL="https://us-central1-theredline-jn.cloudfunctions.net/triggerNewsFetch"
+
+if [[ "$(gcloud config get-value project)" != "$PROJECT_ID" ]]; then
+    echo "⚠️ WARNING: You are not in the TRL project! Current project: $(gcloud config get-value project)"
+    read -p "Switch to $PROJECT_ID project? (yes/no): " confirm
+    if [[ "$confirm" == "yes" ]]; then
+        gcloud config set project $PROJECT_ID
+        echo "Switched to project: $PROJECT_ID"
+    else
+        echo "Exiting. Run 'gcloud config set project $PROJECT_ID' first."
         exit 1
     fi
 fi
 
-# Add function to check for firebase functions
 check_firebase_functions() {
     echo "Checking for Firebase Functions..."
-    # Check if firebase CLI is installed
     if ! command -v firebase &> /dev/null; then
         echo "Firebase CLI not found. Install it to manage Firebase Functions."
         echo "Run: npm install -g firebase-tools"
         return 1
     fi
     
-    # Try to list firebase functions
     echo "Listing Firebase Functions (you may need to log in first):"
     firebase functions:list --project="$PROJECT_ID" 2>/dev/null || echo "Could not list Firebase functions. Try 'firebase login' first."
 }
 
-# Function to stop firebase functions
 stop_firebase_functions() {
     echo "Attempting to stop Firebase Functions..."
     
-    # Check if firebase CLI is installed
     if ! command -v firebase &> /dev/null; then
         echo "Firebase CLI not found. Install it to manage Firebase Functions."
         echo "Run: npm install -g firebase-tools"
         return 1
     fi
 
-    # Try to list and delete firebase functions
     echo "Do you want to DELETE all Firebase Functions? This requires Firebase CLI access."
     read -p "Proceed? (yes/no): " confirm
     if [[ "$confirm" == "yes" ]]; then
@@ -63,7 +74,6 @@ stop_firebase_functions() {
     fi
 }
 
-# Add function to delete scheduler job
 delete_scheduler_job() {
     JOB_NAME=$1
     LOCATION=$2
@@ -72,26 +82,34 @@ delete_scheduler_job() {
     gcloud scheduler jobs delete $JOB_NAME --location="$LOCATION" --quiet
 }
 
-# Start both functions
 start() {
     echo "Starting scraper and Cloud Function..."
-
-    # Create/update the scraper scheduler job (Cloud Run)
-    gcloud scheduler jobs create http trl-scraper-job \
-        --schedule="$SCHEDULE" \
-        --uri="https://$SCRAPER_SERVICE_ID-290283837848.us-central1.run.app/" \
-        --http-method=GET \
-        --location="$LOCATION"
-
-    # Enable the news fetching configuration (Cloud Function)
-    curl -X POST "$CONFIG_SERVICE_URL" \
+    
+    SCRAPER_URL=$(gcloud run services describe $SCRAPER_SERVICE_ID --platform managed --region $LOCATION --format="value(status.url)")
+    
+    # Only run between 9AM and 9PM
+    SCHEDULE_FORMAT="*/${INTERVAL_MINUTES} 9-21 * * *"
+    
+    # Delete existing job if it exists
+    gcloud scheduler jobs delete trl-news-fetch --location=$LOCATION --quiet 2>/dev/null || true
+    
+    # Create a new job with proper URL and schedule
+    gcloud scheduler jobs create http trl-news-fetch \
+      --schedule="$SCHEDULE_FORMAT" \
+      --uri="$SCRAPER_URL" \
+      --http-method=GET \
+      --location=$LOCATION
+      
+    # Enable the news fetching configuration
+    echo "Enabling news fetching configuration..."
+    curl -X POST "$UPDATENEWSFETCHINGCONFIG_URL" \
         -H "Content-Type: application/json" \
-        -d '{"enabled":true,"intervalMinutes":2}'
-
-    echo "Scraper and Cloud Function started with schedule: $SCHEDULE"
+        -d "{\"enabled\":true,\"intervalMinutes\":$INTERVAL_MINUTES}"
+    
+    echo "Scraper and Cloud Function started with schedule: $SCHEDULE_FORMAT"
+    echo "Target URL: $SCRAPER_URL"
 }
 
-# Stop functions
 stop() {
     echo "Stopping all services..."
 
@@ -107,9 +125,9 @@ stop() {
         done
     done
 
-    # Disable the news fetching configuration (Cloud Function)
+    # Disable the news fetching configuration
     echo "Disabling news fetching configuration..."
-    curl -X POST "$CONFIG_SERVICE_URL" \
+    curl -X POST "$UPDATENEWSFETCHINGCONFIG_URL" \
         -H "Content-Type: application/json" \
         -d '{"enabled":false}'
     
@@ -147,7 +165,6 @@ stop() {
         done
     fi
     
-    # Delete cloud functions (if user confirms)
     echo "Finding Cloud Functions..."
     FUNCTIONS=$(gcloud functions list --format="value(name)")
     
@@ -166,7 +183,6 @@ stop() {
         fi
     fi
     
-    # Add Firebase Functions handling
     echo -e "\nChecking for Firebase Functions..."
     stop_firebase_functions
     
@@ -174,7 +190,6 @@ stop() {
     echo "To verify no functions are running, use: $0 status"
 }
 
-# Stop a specific service by name
 stop_service() {
     SERVICE_NAME=$1
     
@@ -186,16 +201,13 @@ stop_service() {
     
     echo "Stopping service: $SERVICE_NAME"
     
-    # Check if service exists
     if gcloud run services describe $SERVICE_NAME --region="$LOCATION" &>/dev/null; then
-        # Set minimum instances to 0
         echo "Setting $SERVICE_NAME to 0 instances..."
         gcloud run services update $SERVICE_NAME \
             --min-instances=0 \
             --region="$LOCATION" \
             --project="$PROJECT_ID"
         
-        # Remove traffic
         echo "Removing traffic from $SERVICE_NAME..."
         gcloud run services update $SERVICE_NAME \
             --no-traffic \
@@ -208,16 +220,13 @@ stop_service() {
     fi
 }
 
-# Update the schedule
 update() {
     echo "Updating schedule to: $SCHEDULE"
 
-    # Update the scraper scheduler job (Cloud Run)
     gcloud scheduler jobs update http trl-scraper-job \
         --schedule="$SCHEDULE" \
         --location="$LOCATION"
 
-    # Update the news fetching configuration (Cloud Function)
     curl -X POST "$CONFIG_SERVICE_URL" \
         -H "Content-Type: application/json" \
         -d "{\"intervalMinutes\":${SCHEDULE#*/}}"
@@ -225,11 +234,9 @@ update() {
     echo "Schedule updated to: $SCHEDULE"
 }
 
-# Function to check status of services
 status() {
     echo "Checking status of Cloud services..."
     
-    # Check scheduler jobs (in all locations)
     echo "Cloud Scheduler Jobs:"
     LOCATIONS="us-central1 us-east1 us-west1 europe-west1 asia-east1"
     for loc in $LOCATIONS; do
@@ -254,7 +261,6 @@ status() {
     curl -X GET "$CONFIG_SERVICE_URL" 2>/dev/null || echo "Cannot reach config service"
 }
 
-# Function to list all resources
 list_all() {
     echo "Listing all cloud resources:"
     
@@ -272,27 +278,7 @@ list_all() {
     gcloud functions list --format="table(name,status,entryPoint,trigger.eventType)" || echo "No Cloud Functions found"
 }
 
-# Function to check and delete a specific Firebase function
-check_schedulednewsfetch() {
-    echo "Checking for scheduledNewsFetch Firebase Function..."
-    
-    # Check if the project has the function
-    if firebase functions:list | grep -q "scheduledNewsFetch"; then
-        echo "Found scheduledNewsFetch function"
-        read -p "Do you want to DELETE the scheduledNewsFetch function? (yes/no): " confirm
-        if [[ "$confirm" == "yes" ]]; then
-            echo "Deleting scheduledNewsFetch function..."
-            firebase functions:delete scheduledNewsFetch --force
-        else
-            echo "Function was not deleted. It will continue to run every 2 minutes."
-            echo "The config has been set to disabled, but the function still exists."
-        fi
-    else
-        echo "scheduledNewsFetch function not found in this project."
-    fi
-}
 
-# Function to verify project context
 verify_project() {
     echo "Checking TRL project configuration..."
     CURRENT_PROJECT=$(gcloud config get-value project)
@@ -304,7 +290,7 @@ verify_project() {
         echo "Current: $CURRENT_PROJECT"
         echo "This may cause deployment issues between projects."
     else
-        echo "✅ Project verification successful!"
+        echo "✅ Project verification successful :-)"
     fi
     
     # List resources specific to this project
@@ -319,6 +305,105 @@ verify_project() {
     
     echo -e "\nIf these resources don't look right, switch projects with:"
     echo "gcloud config set project YOUR-TRL-PROJECT-ID"
+}
+
+deploy() {
+    echo "Deploying TRL services with complete project isolation..."
+    
+    # Ensure we're in the right configuration
+    gcloud config configurations activate trl 2>/dev/null || gcloud config configurations create trl
+    gcloud config set project $PROJECT_ID
+    gcloud config set compute/region $LOCATION
+    
+    # Update Application Default Credentials
+    gcloud auth application-default set-quota-project $PROJECT_ID
+    
+    # Build and push Docker image with project-specific tags
+    echo "Building Docker image..."
+    docker build -t gcr.io/$PROJECT_ID/$SCRAPER_SERVICE_ID:latest .
+    
+    echo "Pushing to Container Registry..."
+    docker push gcr.io/$PROJECT_ID/$SCRAPER_SERVICE_ID:latest
+    
+    echo "Deploying to Cloud Run with isolated configuration..."
+    gcloud run deploy $SCRAPER_SERVICE_ID \
+      --image gcr.io/$PROJECT_ID/$SCRAPER_SERVICE_ID:latest \
+      --platform managed \
+      --region $LOCATION \
+      --project $PROJECT_ID \
+      --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,PROJECT_ID=$PROJECT_ID" \
+      --tag trl
+      
+    echo "Deploying Firebase Functions..."
+    cd functions
+    firebase use $PROJECT_ID
+    firebase deploy --only functions --project $PROJECT_ID \
+      --set-env-vars="DB_COLLECTION=$DB_COLLECTION,INTERVAL_MINUTES=$INTERVAL_MINUTES,GOOGLE_AI_STUDIO_API_KEY=$GOOGLE_AI_STUDIO_API_KEY"
+    cd ..
+    
+    echo "Starting scheduler..."
+    start
+    
+    echo "Deployment complete. Verify with: $0 status"
+}
+
+deploy_only() {
+    echo "Deploying TRL services without starting them..."
+    
+    # Ensure we're in the right configuration
+    gcloud config configurations activate trl 2>/dev/null || gcloud config configurations create trl
+    gcloud config set project $PROJECT_ID
+    gcloud config set compute/region $LOCATION
+    
+    # Update Application Default Credentials
+    gcloud auth application-default set-quota-project $PROJECT_ID
+    
+    # Check for Firebase credentials
+    if [ ! -f "scraping/firebase-credentials.json" ]; then
+        echo "⚠️ WARNING: Firebase credentials file not found!"
+        echo "Please download a service account key from Firebase console and save it as scraping/firebase-credentials.json"
+        read -p "Continue anyway? (yes/no): " continue_without_creds
+        if [[ "$continue_without_creds" != "yes" ]]; then
+            echo "Exiting. Please add the credentials file and try again."
+            exit 1
+        fi
+    fi
+    
+    # Build and push Docker image with project-specific tags
+    echo "Building Docker image with project-specific tags..."
+    docker build --platform linux/amd64 \
+                 -t gcr.io/$PROJECT_ID/$SCRAPER_SERVICE_ID:latest \
+                 -t gcr.io/$PROJECT_ID/$SCRAPER_SERVICE_ID:v1 \
+                 --build-arg PROJECT_ID=$PROJECT_ID \
+                 .
+    
+    echo "Pushing to Container Registry..."
+    docker push gcr.io/$PROJECT_ID/$SCRAPER_SERVICE_ID:latest
+    docker push gcr.io/$PROJECT_ID/$SCRAPER_SERVICE_ID:v1
+    
+    echo "Setting Firebase Functions config..."
+    firebase functions:config:set \
+      db.collection="$DB_COLLECTION" \
+      interval.minutes="$INTERVAL_MINUTES" \
+      gemini.api_key="$GOOGLE_AI_STUDIO_API_KEY" \
+      --project $PROJECT_ID
+    
+    echo "Deploying Firebase Functions..."
+    cd functions
+    firebase use $PROJECT_ID
+    firebase deploy --only functions --project $PROJECT_ID
+    cd ..
+    
+    echo "Deploying to Cloud Run with isolated configuration..."
+    gcloud run deploy $SCRAPER_SERVICE_ID \
+      --image gcr.io/$PROJECT_ID/$SCRAPER_SERVICE_ID:latest \
+      --platform managed \
+      --region $LOCATION \
+      --project $PROJECT_ID \
+      --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,PROJECT_ID=$PROJECT_ID,DB_COLLECTION=$DB_COLLECTION,INTERVAL_MINUTES=$INTERVAL_MINUTES,GOOGLE_AI_STUDIO_API_KEY=$GOOGLE_AI_STUDIO_API_KEY" \
+      --tag trl
+    
+    echo "Deployment complete but NOT started. To start services, run: $0 start"
 }
 
 # Main script logic
@@ -344,8 +429,14 @@ case "$1" in
     verify)
         verify_project
         ;;
+    deploy)
+        deploy
+        ;;
+    deploy_only)
+        deploy_only
+        ;;
     *)
-        echo "Usage: $0 {start|stop|stop-service SERVICE_NAME|update|status|list|verify}"
+        echo "Usage: $0 {start|stop|stop-service SERVICE_NAME|update|status|list|verify|deploy|deploy_only}"
         exit 1
         ;;
 esac

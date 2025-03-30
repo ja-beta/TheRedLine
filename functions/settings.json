@@ -1,0 +1,11 @@
+{
+  "database": {
+    "collection": "news-03",
+    "url": "https://theredline-jn-default-rtdb.firebaseio.com"
+  },
+  "scheduling": {
+    "intervalMinutes": 3,
+    "cronExpression": "*/3 * * * *"
+  },
+  "projectId": "theredline-jn"
+} 

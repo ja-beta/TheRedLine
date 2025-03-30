@@ -200,35 +200,32 @@ def store_article(article, source):
 
 def scrape_news():
     articles_processed = 0
-    target_articles_per_site = MAX_ARTICLES_PER_SITE  
+    sites_list = list(NEWS_SITES.items())
+    sites_tried = set()
     
-    for site_name, site_config in NEWS_SITES.items():
+    while len(sites_tried) < len(sites_list) and articles_processed == 0:
+        remaining_sites = [(name, config) for name, config in sites_list if name not in sites_tried]
+        site_name, site_config = random.choice(remaining_sites)
+        sites_tried.add(site_name)
+        
         try:
             print(f"\nProcessing {site_name}...")
             article_links = get_article_links(site_name, site_config)
+            random.shuffle(article_links)  
             
-            print(f"Found {len(article_links)} articles, will process until we find {target_articles_per_site}")
-            
-            articles_found_this_site = 0
-            total_articles_checked = 0
+            print(f"Found {len(article_links)} articles, will process until we find one relevant article")
             
             for link in article_links:
-                if articles_found_this_site >= target_articles_per_site:
-                    print(f"Found {target_articles_per_site} articles from {site_name}, moving to next site")
-                    break
-                    
                 try:
-                    total_articles_checked += 1
-                    print(f"\nChecking article {total_articles_checked} of {len(article_links)}")
+                    print(f"\nChecking article from {site_name}")
                     time.sleep(2)  # Be nice to the servers
                     
                     article = scrape_article(link, site_name)
                     if article and search_keywords(article):
                         if store_article(article, site_name):
                             articles_processed += 1
-                            articles_found_this_site += 1
                             print(f"Successfully processed and stored article: {article['title']}")
-                            print(f"Found {articles_found_this_site} of {target_articles_per_site} target articles for {site_name}")
+                            return articles_processed  # Exit after finding one article
                         else:
                             print(f"Duplicate article found, continuing search...")
                     else:
@@ -238,24 +235,23 @@ def scrape_news():
                     print(f"Error processing article {link}: {e}")
                     continue
                 
-            print(f"\nCompleted {site_name}: Found {articles_found_this_site} relevant articles after checking {total_articles_checked} articles")
-            time.sleep(5) 
+            print(f"\nCompleted {site_name}: No new relevant articles found")
             
         except Exception as e:
             print(f"Error processing site {site_name}: {e}")
             continue
     
-    print(f"\nScript completed. Processed {articles_processed} new articles across all sites.")
+    print(f"\nScript completed. Processed {articles_processed} new articles.")
     return articles_processed
 
-@app.route('/', methods=['GET']) # Define a route for the root path '/'
+@app.route('/', methods=['GET']) 
 def run_scraper():
-    print("Scraping function triggered!") # Log when the function starts
+    print("Scraping function triggered!") 
     news = scrape_news()
     if news:
-        return "Scraping completed and data stored in Firestore", 200 # Return a success message
+        return "Scraping completed and data stored in Firestore", 200 
     else:
-        return "Scraping failed", 500 # Return an error message if scraping fails
+        return "Scraping failed", 500 
 
 if __name__ == '__main__':
-    app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 8080))) # Start Flask app, listen on port from PORT env var or 8080
+    app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 8080))) 
